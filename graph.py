@@ -27,16 +27,8 @@ sub = roda_query("""
 	filter (!isBlank(?s)) 
 	filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
 	filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
-	} limit 100000
-	""")
-
-print "Buscando as materias..."
-
-materias = roda_query("""
-	SELECT ?s
-	FROM <http://semantica.globo.com/esportes/>
-	WHERE {?s a <http://semantica.globo.com/esportes/MateriaEsporte>
-	} limit 100 offset 0
+    filter not exists {?s a <http://semantica.globo.com/esportes/MateriaEsporte>}	
+	} limit 70000
 	""")
 
 print "Carregando o grafo..."
@@ -53,26 +45,64 @@ print("graph has %d nodes with %d edges"\
           %(nx.number_of_nodes(G),nx.number_of_edges(G)))
 print(nx.number_connected_components(G),"connected components")
 
-lista_materias = []
+import pdb; pdb.set_trace()
 
-for i in materias:
+print "Buscando as materias..."
+
+materias = roda_query("""
+	SELECT ?s ?p ?o
+	FROM <http://semantica.globo.com/esportes/>
+	WHERE {?s a <http://semantica.globo.com/esportes/MateriaEsporte>;
+	       ?p ?o 
+	filter (isURI(?o) && !isBlank(?o))
+	filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
+	filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
+	} 
+	limit 10 offset 0
+	""")
+
+materias_order = sorted(materias, key=lambda k: k['s']['value']) 
+
+lista_materias = {}
+
+old_value = ''
+
+for i in materias_order:
 	# print i["s"]["value"], i["p"]["value"], i["o"]["value"]
-	lista_materias.append(i["s"]["value"])
+	if old_value != i["s"]["value"]:
+		lista_materias[i["s"]["value"]] = [i["o"]["value"]]
+		old_value = i["s"]["value"]
+	else:
+		lista_materias[i["s"]["value"]].append(i["o"]["value"])
+
 
 print "Calculando os paths..."
 
-for i in range(len(lista_materias)):
-	for j in range(i+1, len(lista_materias)):
-		try:
-			paths = list(nx.all_simple_paths(G, source=lista_materias[i], target=lista_materias[j], cutoff=4))
-			# paths = nx.all_shortest_paths(G, source=lista_materias[i], target=lista_materias[j])
-			if len(paths) > 0:
-				print  lista_materias[i], len(paths),lista_materias[j]
-				# for path in paths:
-				# 	print path
-				# 	# print "Tamanho path:", len(path)
-		except NetworkXError:
-			pass
+for m1 in lista_materias.keys():
+	cabeca = lista_materias[m1]
+	del lista_materias[m1]
+	for i1 in cabeca:
+		for m2 in lista_materias.keys():
+			for i2 in lista_materias[m2]:
+				try:
+					paths = list(nx.all_simple_paths(G, source=i1, target=i2, cutoff=4))
+					if len(paths) > 0:
+						t1 = 0
+						t2 = 0
+						t3 = 0
+						t4 = 0
+						for path in paths:
+							if len(path) - 2 == 1:
+								t1 += 1
+							elif len(path) - 2 == 2:
+								t2 += 1
+							elif len(path) - 2 == 3:
+								t3 += 1
+							elif len(path) - 2 == 4:
+								t4 += 1
+						print i1, 't1:', t1,'t2:', t2,'t3:', t3,'t4:', t4, i2
+				except NetworkXError:
+					pass
 
 print "Fim do processo"
 
