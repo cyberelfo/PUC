@@ -2,6 +2,11 @@
 import networkx as nx
 from networkx.exception import NetworkXError
 
+imagem_on = False
+nr_triplas = 10000
+nr_materias = 100
+super_node = 100
+
 def gera_imagem(G):
 	import matplotlib.pyplot as plt
 	nx.draw(G, with_labels=False)
@@ -15,11 +20,10 @@ def roda_query(query):
 	results = sparql.query().convert()
 	return results["results"]["bindings"]
 
-imagem_on = False
 
 print "Buscando as triplas..."
 
-sub = roda_query("""
+my_query = """
 	SELECT ?s ?p ?o
 	FROM <http://semantica.globo.com/esportes/>
 	WHERE {?s ?p ?o 
@@ -28,8 +32,10 @@ sub = roda_query("""
 	filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
 	filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
     filter not exists {?s a <http://semantica.globo.com/esportes/MateriaEsporte>}	
-	} limit 70000
-	""")
+	} limit %s
+	""" % nr_triplas
+
+sub = roda_query(my_query)
 
 print "Carregando o grafo..."
 
@@ -45,11 +51,22 @@ print("graph has %d nodes with %d edges"\
           %(nx.number_of_nodes(G),nx.number_of_edges(G)))
 print(nx.number_connected_components(G),"connected components")
 
-import pdb; pdb.set_trace()
+# paths = list(nx.all_simple_paths(G, source='http://semantica.globo.com/esportes/equipe/2661', target='http://semantica.globo.com/esportes/atleta/73862', cutoff=4))
+# print paths
+
+for i in G.nodes():
+	if G.degree(i) > super_node:
+		G.remove_node(i)
+
+print("graph has %d nodes with %d edges"\
+          %(nx.number_of_nodes(G),nx.number_of_edges(G)))
+print(nx.number_connected_components(G),"connected components")
+
+# import pdb; pdb.set_trace()
 
 print "Buscando as materias..."
 
-materias = roda_query("""
+my_query = """
 	SELECT ?s ?p ?o
 	FROM <http://semantica.globo.com/esportes/>
 	WHERE {?s a <http://semantica.globo.com/esportes/MateriaEsporte>;
@@ -58,8 +75,10 @@ materias = roda_query("""
 	filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
 	filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
 	} 
-	limit 10 offset 0
-	""")
+	limit %s
+	""" % nr_materias
+
+materias = roda_query(my_query)
 
 materias_order = sorted(materias, key=lambda k: k['s']['value']) 
 
@@ -91,16 +110,19 @@ for m1 in lista_materias.keys():
 						t2 = 0
 						t3 = 0
 						t4 = 0
+						t5 = 0
 						for path in paths:
-							if len(path) - 2 == 1:
+							if   len(path) == 1:
 								t1 += 1
-							elif len(path) - 2 == 2:
+							elif len(path) == 2:
 								t2 += 1
-							elif len(path) - 2 == 3:
+							elif len(path) == 3:
 								t3 += 1
-							elif len(path) - 2 == 4:
+							elif len(path) == 4:
 								t4 += 1
-						print i1, 't1:', t1,'t2:', t2,'t3:', t3,'t4:', t4, i2
+							elif len(path) == 5:
+								t5 += 1
+						print i1, 't1:', t1,'t2:', t2,'t3:', t3,'t4:', t4,'t5:', t5, i2
 				except NetworkXError:
 					pass
 
