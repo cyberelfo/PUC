@@ -113,6 +113,9 @@ print(nx.number_connected_components(G),"connected components")
 
 print "Buscando as materias..."
 
+
+# Preciso buscar as matérias publicadas em datas próximas
+
 my_query = """
 	SELECT ?s ?p ?o
 	FROM <http://semantica.globo.com/esportes/>
@@ -147,13 +150,21 @@ print "Calculando os paths..."
 db = MySQLdb.connect("localhost","root","","PUC" )
 cursor = db.cursor()
 
+uniao = {}
+scores = {}
+
 for m1 in lista_materias.keys():
 	cabeca = lista_materias[m1]
 	del lista_materias[m1]
 	for i1 in cabeca:
 		for m2 in lista_materias.keys():
+			if not m1+'.'+m2 in uniao:
+				uniao[m1+'.'+m2] = 0
+				scores[m1+'.'+m2] = 0
 			for i2 in lista_materias[m2]:
-				if i1 != i2:						
+				if i1 == i2:
+					uniao[m1+'.'+m2] += 1
+				elif i1 != i2:
 					try:
 						paths = list(nx.all_simple_paths(G, source=i1, target=i2, cutoff=max_path))
 					except NetworkXError:
@@ -163,7 +174,7 @@ for m1 in lista_materias.keys():
 						s3 = 0
 						s4 = 0
 						for path in paths:
-							sql = """INSERT INTO paths (origem, destino, path, tamanho) VALUES (%s, %s, %s, %s);"""
+							sql = """INSERT INTO individuos (origem, destino, path, tamanho) VALUES (%s, %s, %s, %s);"""
 							data = (m1,m2, ','.join(path), str(len(path)))
 							cursor.execute(sql, data)
 							db.commit()
@@ -174,7 +185,15 @@ for m1 in lista_materias.keys():
 							elif len(path) == 4:
 								s4 += 1
 						score = (0.5 ** 2 * s2) + (0.5 ** 3 * s3) + (0.5 ** 4 * s4) 
+						scores[m1+'.'+m2] += score
 						print i1, 's2:', s2,'s3:', s3,'s4:', s4, 'score:',score, i2
+			if scores[m1+'.'+m2] > 0:
+				print m1, scores[m1+'.'+m2], uniao[m1+'.'+m2], m2, '\n'
+				sql = """INSERT INTO materias (origem, destino, score, intercessao) VALUES (%s, %s, %s, %s);"""
+				data = (m1,m2, scores[m1+'.'+m2], uniao[m1+'.'+m2])
+				cursor.execute(sql, data)
+				db.commit()
+
 
 
 cursor.close()
