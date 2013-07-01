@@ -5,15 +5,16 @@ import MySQLdb
 import timeit
 from sys import stdout
 
-imagem_on = False
-nr_triplas = 1000000
-nr_materias = 10000
-super_node = 100
-max_path = 3
-produto_global = "esportes"
+IMAGEM_ON = False
+MAX_TRIPLAS = 1000000
+MAX_MATERIAS = 10000
+SUPER_NODE = 1000
+MAX_PATH = 3
+NOME_PRODUTO = "G1"
+# NOME_PRODUTO = "esportes"
 
-data_inicio = "2013-03-01T00:00:00Z"
-data_fim    = "2013-03-05T00:00:00Z"
+DATA_INICIO = "2013-03-01T00:00:00Z"
+DATA_FIM    = "2013-03-02T00:00:00Z"
 
 def gera_imagem(G):
 	import matplotlib.pyplot as plt
@@ -22,14 +23,14 @@ def gera_imagem(G):
 
 def roda_query(query):
 	from SPARQLWrapper import SPARQLWrapper, JSON
-	sparql = SPARQLWrapper("http://localhost:8890/sparql/")
-	sparql.setQuery(query)
-	sparql.setReturnFormat(JSON)
-	results = sparql.query().convert()
+	_sparql = SPARQLWrapper("http://localhost:8890/sparql/")
+	_sparql.setQuery(query)
+	_sparql.setReturnFormat(JSON)
+	results = _sparql.query().convert()
 	return results["results"]["bindings"]	
 
-def busca_materias(produto):
-	materias_esporte = """
+def busca_materias(produto, data_inicio, data_fim, max_materias):
+	_materias_esporte = """
 		SELECT ?s ?p ?o
 		FROM <http://semantica.globo.com/esportes/>
 		WHERE {?s a <http://semantica.globo.com/esportes/MateriaEsporte>;
@@ -42,9 +43,9 @@ def busca_materias(produto):
 		} 
 		order by ?s
 		limit %s
-		""" % (data_inicio, data_fim, nr_materias)
+		""" % (data_inicio, data_fim, max_materias)
 
-	materias_G1 = """
+	_materias_G1 = """
 		SELECT ?s ?p ?o
 		FROM <http://semantica.globo.com/G1/>
 		WHERE {?s a <http://semantica.globo.com/G1/Materia>;
@@ -58,30 +59,30 @@ def busca_materias(produto):
 		} 
 		order by ?s
 		limit %s
-		""" % (data_inicio, data_fim, nr_materias)
+		""" % (data_inicio, data_fim, max_materias)
 
 	if produto == 'esportes':
-		materias = roda_query(materias_esporte)
+		_materias = roda_query(_materias_esporte)
 	elif produto == 'G1':
-		materias = roda_query(materias_G1)
+		_materias = roda_query(_materias_G1)
 
-	materias_order = sorted(materias, key=lambda k: k['s']['value']) 
+	_materias_order = sorted(_materias, key=lambda k: k['s']['value']) 
 
-	lista_materias = {}
+	_lista_materias = {}
 
-	old_value = ''
+	_old_value = ''
 
-	for i in materias_order:
-		if old_value != i["s"]["value"]:
-			lista_materias[i["s"]["value"]] = [i["o"]["value"]]
-			old_value = i["s"]["value"]
+	for i in _materias_order:
+		if _old_value != i["s"]["value"]:
+			_lista_materias[i["s"]["value"]] = [i["o"]["value"]]
+			_old_value = i["s"]["value"]
 		else:
-			lista_materias[i["s"]["value"]].append(i["o"]["value"])
-	return lista_materias
+			_lista_materias[i["s"]["value"]].append(i["o"]["value"])
+	return _lista_materias
 
-def busca_entidades(produto):
+def busca_entidades(produto, max_triplas):
 
-	query_esportes = """
+	_query_esportes = """
 		SELECT ?s ?p ?o
 		FROM <http://semantica.globo.com/esportes/>
 		WHERE {?s ?p ?o 
@@ -100,9 +101,9 @@ def busca_entidades(produto):
 	    filter not exists {?s a <http://semantica.globo.com/base/Foto>}	
 	    filter not exists {?s a <http://semantica.globo.com/base/GaleriaDeFotos>}	
 	    	} limit %s
-		""" % nr_triplas
+		""" % max_triplas
 
-	query_g1 = """
+	_query_g1 = """
 		SELECT ?s ?p ?o
 		FROM <http://semantica.globo.com/G1/>
 		WHERE {?s ?p ?o 
@@ -121,9 +122,9 @@ def busca_entidades(produto):
 	    filter not exists {?s a <http://semantica.globo.com/base/Foto>}
 	    filter not exists {?s a <http://semantica.globo.com/base/GaleriaDeFotos>}
 	    	} limit %s
-		""" % nr_triplas
+		""" % max_triplas
 
-	query_base = """
+	_query_base = """
 		SELECT ?s ?p ?o
 		FROM <http://semantica.globo.com/>
 		WHERE {?s ?p ?o 
@@ -142,16 +143,16 @@ def busca_entidades(produto):
 	    filter not exists {?s a <http://semantica.globo.com/base/Foto>}	
 	    filter not exists {?s a <http://semantica.globo.com/base/GaleriaDeFotos>}	
 	    	} limit %s
-		""" % nr_triplas
+		""" % max_triplas
 
 	if produto == 'esportes':
-		entidades = roda_query(query_esportes)
+		_entidades = roda_query(_query_esportes)
 	elif produto == 'G1':
-		entidades = roda_query(query_g1)
+		_entidades = roda_query(_query_g1)
 	elif produto == 'base':
-		entidades = roda_query(query_base)
+		_entidades = roda_query(_query_base)
 
-	return entidades
+	return _entidades
 
 def carrega_grafo(grafo, items):
 	for i in items:
@@ -169,63 +170,88 @@ def remove_supernode(grafo, max_node):
 				grafo.remove_node(i)
 
 
-def calcula_path(lista_materias, G):
-	uniao = {}
-	scores = {}
-	total = len(lista_materias.keys())
+def calcula_path(lista_materias, G, max_path):
+	_uniao = {}
+	_scores = {}
+	_total = len(lista_materias.keys())
 
 	for m1 in lista_materias.keys():
-		cabeca = lista_materias[m1]
+		_cabeca = lista_materias[m1]
 		del lista_materias[m1]
-		for i1 in cabeca:
+		for i1 in _cabeca:
 			for m2 in lista_materias.keys():
-				if not m1+'.'+m2 in uniao:
-					uniao[m1+'.'+m2] = 0
-					scores[m1+'.'+m2] = 0
+				if not m1+'.'+m2 in _uniao:
+					_uniao[m1+'.'+m2] = 0
+					_scores[m1+'.'+m2] = 0
 				for i2 in lista_materias[m2]:
 					if i1 == i2:
-						uniao[m1+'.'+m2] += 1
+						_uniao[m1+'.'+m2] += 1
 					elif i1 != i2:
 						try:
-							paths = list(nx.all_simple_paths(G, source=i1, target=i2, cutoff=max_path))
+							_paths = list(nx.all_simple_paths(G, source=i1, target=i2, cutoff=max_path))
 						except NetworkXError:
 							continue
-						if len(paths) > 0:
+						if len(_paths) > 0:
 							s2 = 0
 							s3 = 0
 							s4 = 0
-							for path in paths:
-								sql = """INSERT INTO individuos (origem, destino, path, tamanho) VALUES (%s, %s, %s, %s);"""
-								data = (m1,m2, ','.join(path), str(len(path)))
-								cursor.execute(sql, data)
+							for _path in _paths:
+								_sql = """INSERT INTO individuos (id_execucao, origem, destino, path, tamanho) VALUES (%s, %s, %s, %s, %s);"""
+								_data = (id_execucao, m1,m2, ','.join(_path), str(len(_path)))
+								cursor.execute(_sql, _data)
 								db.commit()
-								if   len(path) == 2:
+								if   len(_path) == 2:
 									s2 += 1
-								elif len(path) == 3:
+								elif len(_path) == 3:
 									s3 += 1
-								elif len(path) == 4:
+								elif len(_path) == 4:
 									s4 += 1
-							score = (0.5 ** 2 * s2) + (0.5 ** 3 * s3) + (0.5 ** 4 * s4) 
-							scores[m1+'.'+m2] += score
+							_score = (0.5 ** 2 * s2) + (0.5 ** 3 * s3) + (0.5 ** 4 * s4) 
+							_scores[m1+'.'+m2] += _score
 							# print i1, 's2:', s2,'s3:', s3,'s4:', s4, 'score:',score, i2
-				if scores[m1+'.'+m2] > 0:
-					# print m1, scores[m1+'.'+m2], uniao[m1+'.'+m2], m2, '\n'
+				if _scores[m1+'.'+m2] > 0:
+					# print m1, _scores[m1+'.'+m2], _uniao[m1+'.'+m2], m2, '\n'
 
-					sql = """INSERT INTO materias (origem, destino, score, entidades_origem, entidades_destino, intercessao) VALUES (%s, %s, %s, %s, %s, %s);"""
-					data = (m1,m2, scores[m1+'.'+m2], len(cabeca), len(lista_materias[m2]), uniao[m1+'.'+m2])
-					cursor.execute(sql, data)
+					_sql = """INSERT INTO materias (id_execucao, origem, destino, score, entidades_origem, entidades_destino, intercessao) VALUES (%s, %s, %s, %s, %s, %s, %s);"""
+					_data = (id_execucao, m1,m2, _scores[m1+'.'+m2], len(_cabeca), len(lista_materias[m2]), _uniao[m1+'.'+m2])
+					cursor.execute(_sql, _data)
 					db.commit()
-		total -= 1
+		_total -= 1
 		# print "Falta processar: ", total, "materias"
-		stdout.write("Materias a processar: %d   \r" % (total) )
+		stdout.write("Materias a processar: %d   \r" % (_total) )
 		stdout.flush()
 	print ""
+
+def grava_execucao(produto, dt_inicio, dt_fim, supernode, max_path):
+	_sql = """INSERT INTO execucao (produto, dt_inicio, dt_fim, supernode, max_path) VALUES (%s, %s, %s, %s, %s);"""
+	_data = (produto, dt_inicio, dt_fim, supernode, max_path)
+	cursor.execute(_sql, _data)
+	_id = cursor.lastrowid
+	db.commit()
+	return _id
+
+def atualiza_execucao(id_execucao, materias, g_nos, g_arestas):
+	_sql = """UPDATE execucao  SET materias = %s, nos = %s, arestas = %s where id = %s;"""
+	_data = (materias, g_nos, g_arestas, id_execucao)
+	cursor.execute(_sql, _data)
+	_id = cursor.lastrowid
+	db.commit()
+
+##########################
+### Inicio do programa ###
 
 if __name__ == '__main__':
 
 	start = timeit.default_timer()
 
-	lista_materias = busca_materias(produto_global)
+	print "Produto:", NOME_PRODUTO
+
+	db = MySQLdb.connect("localhost","root","","PUC" )
+	cursor = db.cursor()
+
+	id_execucao = grava_execucao(NOME_PRODUTO, DATA_INICIO, DATA_FIM, SUPER_NODE, MAX_PATH)
+
+	lista_materias = busca_materias(NOME_PRODUTO, DATA_INICIO, DATA_FIM, MAX_MATERIAS)
 
 	total_materias = len(lista_materias.keys())
 
@@ -237,62 +263,54 @@ if __name__ == '__main__':
 
 	print "Busca triplas produto..."
 
-	sub = busca_entidades(produto_global)
+	entidades = busca_entidades(NOME_PRODUTO, MAX_TRIPLAS)
 
 	print "Carregando o grafo produto..."
 
 	G = cria_grafo()
-	carrega_grafo(G, sub)
+	carrega_grafo(G, entidades)
 
 	print("O grafo tem %d nos com %d arestas"\
 	          %(nx.number_of_nodes(G),nx.number_of_edges(G)))
-
-	# paths = list(nx.all_simple_paths(G, source='http://semantica.globo.com/esportes/equipe/2661', target='http://semantica.globo.com/esportes/atleta/73862', cutoff=4))
-	# print paths
 
 	print "Buscando as triplas Base..."
 
-	sub = busca_entidades("base")
+	entidades = busca_entidades("base", MAX_TRIPLAS)
 
 	print "Carregando o grafo Base..."
 
-	carrega_grafo(G, sub)
+	carrega_grafo(G, entidades)
 
 	print("O grafo tem %d nos com %d arestas"\
 	          %(nx.number_of_nodes(G),nx.number_of_edges(G)))
 
 
+	# import pdb; pdb.set_trace()
+
 	print "Remove super_nodes..."
-	remove_supernode(G, super_node)
+	remove_supernode(G, SUPER_NODE)
 	print("O grafo tem %d nos com %d arestas"\
       %(nx.number_of_nodes(G),nx.number_of_edges(G)))
 
 	# import pdb; pdb.set_trace()
 
+	atualiza_execucao(id_execucao, total_materias, nx.number_of_nodes(G), nx.number_of_edges(G))
 
 	print "Calculando os paths..."
 
-	db = MySQLdb.connect("localhost","root","","PUC" )
-	cursor = db.cursor()
-
-	truncate = """truncate table materias;"""
-	cursor.execute(truncate)
-	truncate = """truncate table individuos;"""
-	cursor.execute(truncate)
-
-	calcula_path(lista_materias, G)
+	calcula_path(lista_materias, G, MAX_PATH)
 
 	print "Update score final"
 
-	update = """update materias set score_final = (score + intercessao) * (1 / (entidades_origem * entidades_destino) ); """
+	update = """update materias set score_final = (score + intercessao) * (1 / (entidades_origem * entidades_destino) ) where id_execucao = %s; """
+	data = (id_execucao)
+	cursor.execute(update, data)
 
-	cursor.execute(update)
 
 	db.commit()
-
 	cursor.close()
 
-	if imagem_on:
+	if IMAGEM_ON:
 		gera_imagem(G)
 
 	stop = timeit.default_timer()
