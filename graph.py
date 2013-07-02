@@ -6,10 +6,11 @@ import timeit
 from sys import stdout
 
 IMAGEM_ON = False
-MAX_TRIPLAS = 10000
-MAX_MATERIAS = 100
-SUPER_NODE = 1000
+MAX_TRIPLAS = 1000000
+MAX_MATERIAS = 10000
+SUPER_NODE = 0
 MAX_PATH = 3
+SALVA_PATHS = False
 NOME_PRODUTO = "G1"
 # NOME_PRODUTO = "esportes"
 
@@ -34,6 +35,7 @@ def busca_materias(produto, data_inicio, data_fim, max_materias):
 		SELECT ?s ?p ?o
 		FROM <http://semantica.globo.com/esportes/>
 		WHERE {?s a <http://semantica.globo.com/esportes/MateriaEsporte>;
+		          <http://semantica.globo.com/G1/editoria_id> "42"
 	           <http://semantica.globo.com/base/data_da_primeira_publicacao> ?data ;
 		       ?p ?o 
 		filter (isURI(?o) && !isBlank(?o))
@@ -170,56 +172,77 @@ def remove_supernode(grafo, max_node):
 				grafo.remove_node(i)
 
 
-def calcula_path(lista_materias, G, max_path):
+def calcula_path(lista_materias, G, max_path, salva_paths):
 	_uniao = {}
 	_scores = {}
+	_paths = {}
 	_total = len(lista_materias.keys())
+	search = 0
+	hit = 0
 
 	for m1 in lista_materias.keys():
 		_cabeca = lista_materias[m1]
 		del lista_materias[m1]
+		print "\nFaltam processar: ", _total, "materias"
 		for i1 in _cabeca:
 			for m2 in lista_materias.keys():
 				if not m1+'.'+m2 in _uniao:
 					_uniao[m1+'.'+m2] = 0
 					_scores[m1+'.'+m2] = 0
+				_percentual_completo = 0
+				_completo = 0
 				for i2 in lista_materias[m2]:
+					search += 1
 					if i1 == i2:
 						_uniao[m1+'.'+m2] += 1
-					elif i1 != i2:
+						_paths[i1+'.'+i2] = []
+					elif _paths.has_key(i1+'.'+i2):
+						hit += 1
+					else:
 						try:
-							_paths = list(nx.all_simple_paths(G, source=i1, target=i2, cutoff=max_path))
+							_paths[i1+'.'+i2] = list(nx.all_simple_paths(G, source=i1, target=i2, cutoff=max_path))
+							_paths[i2+'.'+i1] = _paths[i1+'.'+i2]
 						except NetworkXError:
-							continue
-						if len(_paths) > 0:
-							s2 = 0
-							s3 = 0
-							s4 = 0
-							for _path in _paths:
+							_paths[i1+'.'+i2] = []
+							_paths[i2+'.'+i1] = _paths[i1+'.'+i2]
+
+					if len(_paths[i1+'.'+i2]) > 0:
+						s2 = 0
+						s3 = 0
+						s4 = 0
+						for _path in _paths[i1+'.'+i2]:
+
+							if salva_paths:
 								_sql = """INSERT INTO individuos (id_execucao, origem, destino, path, tamanho) VALUES (%s, %s, %s, %s, %s);"""
 								_data = (id_execucao, m1,m2, ','.join(_path), str(len(_path)))
 								cursor.execute(_sql, _data)
 								db.commit()
-								if   len(_path) == 2:
-									s2 += 1
-								elif len(_path) == 3:
-									s3 += 1
-								elif len(_path) == 4:
-									s4 += 1
-							_score = (0.5 ** 2 * s2) + (0.5 ** 3 * s3) + (0.5 ** 4 * s4) 
-							_scores[m1+'.'+m2] += _score
-							# print i1, 's2:', s2,'s3:', s3,'s4:', s4, 'score:',score, i2
+
+							if   len(_path) == 2:
+								s2 += 1
+							elif len(_path) == 3:
+								s3 += 1
+							elif len(_path) == 4:
+								s4 += 1
+
+						_score = (0.5 ** 2 * s2) + (0.5 ** 3 * s3) + (0.5 ** 4 * s4) 
+						_scores[m1+'.'+m2] += _score
+
+					# _completo += 1
+					# _percentual_completo = _completo / len(lista_materias[m2]) * 100.0
+					# print _percentual_completo
+					# print i1, i2
 				if _scores[m1+'.'+m2] > 0:
 					_score_final = (_scores[m1+'.'+m2] + _uniao[m1+'.'+m2]) * (1.0 / (len(_cabeca) * len(lista_materias[m2])) )
 					_sql = """INSERT INTO materias (id_execucao, origem, destino, score, entidades_origem, entidades_destino, intercessao, score_final) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);"""
-					_data = (id_execucao, m1,m2, _scores[m1+'.'+m2], len(_cabeca), len(lista_materias[m2]), _uniao[m1+'.'+m2], _score_final)
+					_data = (id_execucao, m1, m2, _scores[m1+'.'+m2], len(_cabeca), len(lista_materias[m2]), _uniao[m1+'.'+m2], _score_final)
 					cursor.execute(_sql, _data)
 					db.commit()
 		_total -= 1
-		# print "Falta processar: ", _total, "materias"
-		stdout.write("Materias a processar: %d   \r" % (_total) )
-		stdout.flush()
+		# stdout.write("Materias a processar: %d    %d    \r" % (_total, _percentual_completo) )
+		# stdout.flush()
 	print ""
+	print "Search:", search, "Hit:", hit
 
 def grava_execucao(produto, dt_inicio, dt_fim, supernode, max_path):
 	_sql = """INSERT INTO execucao (produto, dt_inicio, dt_fim, supernode, max_path) VALUES (%s, %s, %s, %s, %s);"""
@@ -294,14 +317,21 @@ if __name__ == '__main__':
 
 	print "Calculando os paths..."
 
-	calcula_path(lista_materias, G, MAX_PATH)
+	calcula_path(lista_materias, G, MAX_PATH, SALVA_PATHS)
 
-	cursor.close()
 
 	if IMAGEM_ON:
 		gera_imagem(G)
 
 	stop = timeit.default_timer()
+	tempo_execucao = stop - start 
+
+	update = """update execucao set tempo_execucao = %s where id = %s; """
+	data = (tempo_execucao, id_execucao)
+	cursor.execute(update, data)
+	db.commit()
+
+	cursor.close()
 
 	print "fim processamento"
-	print "Tempo de execucao (segundos):", stop - start 
+	print "Tempo de execucao (segundos):", tempo_execucao
