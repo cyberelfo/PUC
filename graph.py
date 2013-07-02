@@ -6,8 +6,8 @@ import timeit
 from sys import stdout
 
 IMAGEM_ON = False
-MAX_TRIPLAS = 1000000
-MAX_MATERIAS = 10000
+MAX_TRIPLAS = 10000
+MAX_MATERIAS = 100
 SUPER_NODE = 1000
 MAX_PATH = 3
 NOME_PRODUTO = "G1"
@@ -210,14 +210,13 @@ def calcula_path(lista_materias, G, max_path):
 							_scores[m1+'.'+m2] += _score
 							# print i1, 's2:', s2,'s3:', s3,'s4:', s4, 'score:',score, i2
 				if _scores[m1+'.'+m2] > 0:
-					# print m1, _scores[m1+'.'+m2], _uniao[m1+'.'+m2], m2, '\n'
-
-					_sql = """INSERT INTO materias (id_execucao, origem, destino, score, entidades_origem, entidades_destino, intercessao) VALUES (%s, %s, %s, %s, %s, %s, %s);"""
-					_data = (id_execucao, m1,m2, _scores[m1+'.'+m2], len(_cabeca), len(lista_materias[m2]), _uniao[m1+'.'+m2])
+					_score_final = (_scores[m1+'.'+m2] + _uniao[m1+'.'+m2]) * (1.0 / (len(_cabeca) * len(lista_materias[m2])) )
+					_sql = """INSERT INTO materias (id_execucao, origem, destino, score, entidades_origem, entidades_destino, intercessao, score_final) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);"""
+					_data = (id_execucao, m1,m2, _scores[m1+'.'+m2], len(_cabeca), len(lista_materias[m2]), _uniao[m1+'.'+m2], _score_final)
 					cursor.execute(_sql, _data)
 					db.commit()
 		_total -= 1
-		# print "Falta processar: ", total, "materias"
+		# print "Falta processar: ", _total, "materias"
 		stdout.write("Materias a processar: %d   \r" % (_total) )
 		stdout.flush()
 	print ""
@@ -284,9 +283,6 @@ if __name__ == '__main__':
 	print("O grafo tem %d nos com %d arestas"\
 	          %(nx.number_of_nodes(G),nx.number_of_edges(G)))
 
-
-	# import pdb; pdb.set_trace()
-
 	print "Remove super_nodes..."
 	remove_supernode(G, SUPER_NODE)
 	print("O grafo tem %d nos com %d arestas"\
@@ -300,14 +296,6 @@ if __name__ == '__main__':
 
 	calcula_path(lista_materias, G, MAX_PATH)
 
-	print "Update score final"
-
-	update = """update materias set score_final = (score + intercessao) * (1 / (entidades_origem * entidades_destino) ) where id_execucao = %s; """
-	data = (id_execucao)
-	cursor.execute(update, data)
-
-
-	db.commit()
 	cursor.close()
 
 	if IMAGEM_ON:
