@@ -9,9 +9,9 @@ from sys import stdout
 IMAGEM_ON = False
 MAX_TRIPLAS = 1000000
 MAX_MATERIAS = 10000
-SUPER_NODE = 100
+SUPER_NODE = 500
 MAX_PATH = 3
-SALVA_PATHS = True
+SALVA_PATHS = False
 NOME_PRODUTO = "G1"
 # NOME_PRODUTO = "esportes"
 
@@ -186,26 +186,36 @@ def calcula_path(lista_materias, G, max_path, salva_paths):
 	for m1 in origem:
 		_processando += 1
 		print "Processando matéria", _processando, "de", _total
-		print "Entidades M1:", len(lista_materias[m1])
-		print "Entidades M2:",
+		# print "Entidades M1:", len(lista_materias[m1])
+		# stdout.write("Entidades M2: ")
 		destino.remove(m1)
 		for m2 in destino:
+			# stdout.write(str(len(lista_materias[m2]))) 
 			if not _uniao.has_key(m1+'.'+m2):
 				_uniao[m1+'.'+m2] = 0
 				_scores[m1+'.'+m2] = 0			
-			print len(lista_materias[m2]),
 			for e1 in lista_materias[m1]:
 				for e2 in lista_materias[m2]:
+					# stdout.write(".")
+					stdout.write("\n" + e1 + " " + e2)
+					stdout.flush()
 					search += 1
 					if e1 == e2:
+						stdout.write(" Same\n")
 						_uniao[m1+'.'+m2] += 1
 						_paths[e1+'.'+e2] = []
 					elif _paths.has_key(e1+'.'+e2):
+						stdout.write(" Hit\n")
 						hit += 1
 					else:
-						try:
+						stdout.write(" Search ")	
+						try:							
+							start_p = timeit.default_timer()
 							_paths[e1+'.'+e2] = list(nx.all_simple_paths(G, source=e1, target=e2, cutoff=max_path))
 							_paths[e2+'.'+e1] = _paths[e1+'.'+e2]
+							stop_p = timeit.default_timer()
+							stdout.write(" " + str(stop_p - start_p) + " ")
+							stdout.write(str(len(_paths[e1+'.'+e2])) + "\n")
 						except NetworkXError:
 							_paths[e1+'.'+e2] = []
 							_paths[e2+'.'+e1] = _paths[e1+'.'+e2]
@@ -214,6 +224,7 @@ def calcula_path(lista_materias, G, max_path, salva_paths):
 						s3 = 0
 						s4 = 0
 						for _path in _paths[e1+'.'+e2]:
+							stdout.write(".")
 							if salva_paths:
 								_sql = """INSERT INTO individuos (id_execucao, origem, destino, path, tamanho) VALUES (%s, %s, %s, %s, %s);"""
 								_data = (id_execucao, m1, m2, ','.join(_path), str(len(_path)))
@@ -243,81 +254,130 @@ def calcula_path(lista_materias, G, max_path, salva_paths):
 	print "Search:", search, "Hit:", hit
 
 
+def busca_materias_saibamais():
+	from lxml import etree
+	import lxml.html as lh
+	from BeautifulSoup import BeautifulSoup, Tag
+
+	_materias = []
+	materia_nao_encontrada = False
+
+	db_g1 = MySQLdb.connect("localhost","root","","g1" )
+	cursor_g1 = db_g1.cursor()
+	cursor_g1.execute("""
+					select permalink, corpo from materia m, materia_folder mf
+					where m.primeira_publicacao >= '2013-03-07 00:00:00'
+					and m.primeira_publicacao < '2013-03-11 00:00:00'
+					and m.id = mf.materia_id
+					and mf.folder_id = 42
+					and corpo like '%<div class="saibamais componente_materia">%';
+					""")
+
+	materias = cursor_g1.fetchall()
+	for materia in materias:
+		myparser = etree.HTMLParser(encoding="utf-8")
+		tree = etree.HTML(materia[1], parser=myparser)
+		
+		# doc=lh.fromstring(html)
+		# for elem in tree.xpath('.//ul[@class="saibamais componente_materia"]/li'):
+			# print elem.text_content()
+		
+		text = etree.tostring(tree, pretty_print=True)
+		text_a_partir_da_div = text[text.find('''<div class="saibamais componente_materia">'''):] #slicing
+		soup = BeautifulSoup(text_a_partir_da_div)
 
 
+		try:
+			# list comprehension
+			referencias = [(li.text,li.a['href']) for li in soup.ul if type(li) == Tag]
+		except:
+			referencias = []
+			print "Com erro no saiba mais:", materia[0]
 
-def calcula_path_old(lista_materias, G, max_path, salva_paths):
-	_uniao = {}
-	_scores = {}
-	_paths = {}
-	_total = len(lista_materias.keys())
-	search = 0
-	hit = 0
+		_materias_G1 = """ 
+		SELECT ?s 
+		FROM <http://semantica.globo.com/G1/>
+		WHERE {?s a <http://semantica.globo.com/G1/Materia> .
+		       ?s <http://semantica.globo.com/base/permalink> "%s" .
+		} 
+		""" % ("http://g1.globo.com" + materia[0])
+		
+		triplas = roda_query(_materias_G1)
 
-	for m1 in lista_materias.keys():
-		_cabeca = lista_materias[m1]
-		del lista_materias[m1]
-		print "\nFaltam processar: ", _total, "materias"
-		for i1 in _cabeca:
-			for m2 in lista_materias.keys():
-				if not m1+'.'+m2 in _uniao:
-					_uniao[m1+'.'+m2] = 0
-					_scores[m1+'.'+m2] = 0
-				_percentual_completo = 0
-				_completo = 0
-				for i2 in lista_materias[m2]:
-					search += 1
-					if i1 == i2:
-						_uniao[m1+'.'+m2] += 1
-						_paths[i1+'.'+i2] = []
-					elif _paths.has_key(i1+'.'+i2):
-						hit += 1
-					else:
-						try:
-							_paths[i1+'.'+i2] = list(nx.all_simple_paths(G, source=i1, target=i2, cutoff=max_path))
-							_paths[i2+'.'+i1] = _paths[i1+'.'+i2]
-						except NetworkXError:
-							_paths[i1+'.'+i2] = []
-							_paths[i2+'.'+i1] = _paths[i1+'.'+i2]
+		_materia_principal = ''
+		_lista_materias = []
 
-					if len(_paths[i1+'.'+i2]) > 0:
-						s2 = 0
-						s3 = 0
-						s4 = 0
-						for _path in _paths[i1+'.'+i2]:
+		if len(triplas) > 0:
 
-							if salva_paths:
-								_sql = """INSERT INTO individuos (id_execucao, origem, destino, path, tamanho) VALUES (%s, %s, %s, %s, %s);"""
-								_data = (id_execucao, m1,m2, ','.join(_path), str(len(_path)))
-								cursor.execute(_sql, _data)
-								db.commit()
+			_materia_principal = triplas[0]['s']['value']
+			_lista_materias = [("http://g1.globo.com" + materia[0])]
 
-							if   len(_path) == 2:
-								s2 += 1
-							elif len(_path) == 3:
-								s3 += 1
-							elif len(_path) == 4:
-								s4 += 1
+		for ref in referencias:
+			_lista_materias.append(ref[1])
 
-						_score = (0.5 ** 2 * s2) + (0.5 ** 3 * s3) + (0.5 ** 4 * s4) 
-						_scores[m1+'.'+m2] += _score
+		for i in _lista_materias:
 
-					# _completo += 1
-					# _percentual_completo = _completo / len(lista_materias[m2]) * 100.0
-					# print _percentual_completo
-					# print i1, i2
-				print m1, m2
-				if _scores[m1+'.'+m2] > 0:
-					_score_final = (_scores[m1+'.'+m2] + _uniao[m1+'.'+m2]) * (1.0 / (len(_cabeca) * len(lista_materias[m2])) )
-					_sql = """INSERT INTO materias (id_execucao, origem, destino, score, entidades_origem, entidades_destino, intercessao, score_final) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);"""
-					_data = (id_execucao, m1, m2, _scores[m1+'.'+m2], len(_cabeca), len(lista_materias[m2]), _uniao[m1+'.'+m2], _score_final)
-					cursor.execute(_sql, _data)
-					db.commit()
-		_total -= 1
-		# stdout.write("Materias a processar: %d    %d    \r" % (_total, _percentual_completo) )
-		# stdout.flush()
-	print ""
-	print "Search:", search, "Hit:", hit
+			_materias_G1 = """ 
+			SELECT ?s 
+			FROM <http://semantica.globo.com/G1/>
+			WHERE {?s a <http://semantica.globo.com/G1/Materia> .
+			       ?s <http://semantica.globo.com/base/permalink> "%s" .
+			} 
+			""" % (i)
+			
+			triplas = roda_query(_materias_G1)
+
+			if len(triplas) == 0:
+				print "Matéria", i, "não encontrada"
+				db.rollback()
+				break
+
+			_materia_saibamais = triplas[0]['s']['value']
+
+			if _materia_principal != _materia_saibamais:
+				_sql = """INSERT INTO materias_saibamais (id_execucao, materia_principal, materia_saibamais) VALUES (%s, %s, %s);"""
+				_data = (id_execucao, _materia_principal, _materia_saibamais)
+				print _data
+				cursor.execute(_sql, _data)
+
+			_materias_tmp = []
+			_materias_G1 = """ 
+			SELECT ?s ?p ?o
+			FROM <http://semantica.globo.com/G1/>
+			WHERE {?s a <http://semantica.globo.com/G1/Materia> .
+			       ?s <http://semantica.globo.com/base/permalink> "%s" .
+			       ?s ?p ?o 
+			filter (isURI(?o) && !isBlank(?o))
+			filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
+			filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
+			} 
+			order by ?s
+			""" % (i)
+			
+			triplas = roda_query(_materias_G1)
+
+			_materias_tmp = _materias_tmp + triplas
+		
+		db.commit()
+		_materias = _materias + _materias_tmp
+
+	db_g1.close()
+
+	_materias_order = sorted(_materias, key=lambda k: k['s']['value']) 
+
+	_lista_materias = {}
+
+	_old_value = ''
+
+	for i in _materias_order:
+		if _old_value != i["s"]["value"]:
+			_lista_materias[i["s"]["value"]] = [i["o"]["value"]]
+			_old_value = i["s"]["value"]
+		else:
+			_lista_materias[i["s"]["value"]].append(i["o"]["value"])
+	return _lista_materias
+
+
 
 def grava_execucao(produto, dt_inicio, dt_fim, supernode, max_path):
 	_sql = """INSERT INTO execucao (produto, dt_inicio, dt_fim, supernode, max_path) VALUES (%s, %s, %s, %s, %s);"""
@@ -341,14 +401,17 @@ if __name__ == '__main__':
 
 	start = timeit.default_timer()
 
-	print "Produto:", NOME_PRODUTO
+	stdout.write("Produto: " + NOME_PRODUTO + '\n')
 
 	db = MySQLdb.connect("localhost","root","","PUC" )
 	cursor = db.cursor()
 
 	id_execucao = grava_execucao(NOME_PRODUTO, DATA_INICIO, DATA_FIM, SUPER_NODE, MAX_PATH)
 
-	lista_materias = busca_materias(NOME_PRODUTO, DATA_INICIO, DATA_FIM, MAX_MATERIAS)
+	print "Busca materias..."
+
+	# lista_materias = busca_materias(NOME_PRODUTO, DATA_INICIO, DATA_FIM, MAX_MATERIAS)
+	lista_materias = busca_materias_saibamais()
 
 	# import pdb; pdb.set_trace()
 
