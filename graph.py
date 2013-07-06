@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 import networkx as nx
 from networkx.exception import NetworkXError
 import MySQLdb
@@ -8,9 +9,9 @@ from sys import stdout
 IMAGEM_ON = False
 MAX_TRIPLAS = 1000000
 MAX_MATERIAS = 10000
-SUPER_NODE = 0
+SUPER_NODE = 100
 MAX_PATH = 3
-SALVA_PATHS = False
+SALVA_PATHS = True
 NOME_PRODUTO = "G1"
 # NOME_PRODUTO = "esportes"
 
@@ -35,7 +36,6 @@ def busca_materias(produto, data_inicio, data_fim, max_materias):
 		SELECT ?s ?p ?o
 		FROM <http://semantica.globo.com/esportes/>
 		WHERE {?s a <http://semantica.globo.com/esportes/MateriaEsporte>;
-		          <http://semantica.globo.com/G1/editoria_id> "42"
 	           <http://semantica.globo.com/base/data_da_primeira_publicacao> ?data ;
 		       ?p ?o 
 		filter (isURI(?o) && !isBlank(?o))
@@ -177,6 +177,80 @@ def calcula_path(lista_materias, G, max_path, salva_paths):
 	_scores = {}
 	_paths = {}
 	_total = len(lista_materias.keys())
+	_processando = 0
+	search = 0
+	hit = 0
+	origem = lista_materias.keys()
+	destino = lista_materias.keys()
+
+	for m1 in origem:
+		_processando += 1
+		print "Processando matéria", _processando, "de", _total
+		print "Entidades M1:", len(lista_materias[m1])
+		print "Entidades M2:",
+		destino.remove(m1)
+		for m2 in destino:
+			if not _uniao.has_key(m1+'.'+m2):
+				_uniao[m1+'.'+m2] = 0
+				_scores[m1+'.'+m2] = 0			
+			print len(lista_materias[m2]),
+			for e1 in lista_materias[m1]:
+				for e2 in lista_materias[m2]:
+					search += 1
+					if e1 == e2:
+						_uniao[m1+'.'+m2] += 1
+						_paths[e1+'.'+e2] = []
+					elif _paths.has_key(e1+'.'+e2):
+						hit += 1
+					else:
+						try:
+							_paths[e1+'.'+e2] = list(nx.all_simple_paths(G, source=e1, target=e2, cutoff=max_path))
+							_paths[e2+'.'+e1] = _paths[e1+'.'+e2]
+						except NetworkXError:
+							_paths[e1+'.'+e2] = []
+							_paths[e2+'.'+e1] = _paths[e1+'.'+e2]
+
+						s2 = 0
+						s3 = 0
+						s4 = 0
+						for _path in _paths[e1+'.'+e2]:
+							if salva_paths:
+								_sql = """INSERT INTO individuos (id_execucao, origem, destino, path, tamanho) VALUES (%s, %s, %s, %s, %s);"""
+								_data = (id_execucao, m1, m2, ','.join(_path), str(len(_path)))
+								cursor.execute(_sql, _data)
+								db.commit()
+							if   len(_path) == 2:
+								s2 += 1
+							elif len(_path) == 3:
+								s3 += 1
+							elif len(_path) == 4:
+								s4 += 1
+						_score = (0.5 ** 2 * s2) + (0.5 ** 3 * s3) + (0.5 ** 4 * s4)
+						if _scores.has_key(m1+'.'+m2) :
+							_scores[m1+'.'+m2] += _score
+						else:
+							_scores[m1+'.'+m2] = _score
+
+			if _scores[m1+'.'+m2] > 0:
+				_score_final = (_scores[m1+'.'+m2] + _uniao[m1+'.'+m2]) * (1.0 / (len(lista_materias[m1]) * len(lista_materias[m2])) )
+				_sql = """INSERT INTO materias (id_execucao, origem, destino, score, entidades_origem, entidades_destino, intercessao, score_final) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);"""
+				_data = (id_execucao, m1, m2, _scores[m1+'.'+m2], len(lista_materias[m1]), len(lista_materias[m2]), _uniao[m1+'.'+m2], _score_final)
+				cursor.execute(_sql, _data)
+				db.commit()
+		print ""
+
+	print ""
+	print "Search:", search, "Hit:", hit
+
+
+
+
+
+def calcula_path_old(lista_materias, G, max_path, salva_paths):
+	_uniao = {}
+	_scores = {}
+	_paths = {}
+	_total = len(lista_materias.keys())
 	search = 0
 	hit = 0
 
@@ -232,6 +306,7 @@ def calcula_path(lista_materias, G, max_path, salva_paths):
 					# _percentual_completo = _completo / len(lista_materias[m2]) * 100.0
 					# print _percentual_completo
 					# print i1, i2
+				print m1, m2
 				if _scores[m1+'.'+m2] > 0:
 					_score_final = (_scores[m1+'.'+m2] + _uniao[m1+'.'+m2]) * (1.0 / (len(_cabeca) * len(lista_materias[m2])) )
 					_sql = """INSERT INTO materias (id_execucao, origem, destino, score, entidades_origem, entidades_destino, intercessao, score_final) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);"""
@@ -274,6 +349,8 @@ if __name__ == '__main__':
 	id_execucao = grava_execucao(NOME_PRODUTO, DATA_INICIO, DATA_FIM, SUPER_NODE, MAX_PATH)
 
 	lista_materias = busca_materias(NOME_PRODUTO, DATA_INICIO, DATA_FIM, MAX_MATERIAS)
+
+	# import pdb; pdb.set_trace()
 
 	total_materias = len(lista_materias.keys())
 
@@ -330,6 +407,8 @@ if __name__ == '__main__':
 	data = (tempo_execucao, id_execucao)
 	cursor.execute(update, data)
 	db.commit()
+
+	# import pdb; pdb.set_trace()
 
 	cursor.close()
 
