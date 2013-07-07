@@ -15,6 +15,7 @@ SALVA_PATHS = False
 NOME_PRODUTO = "G1"
 # NOME_PRODUTO = "esportes"
 CARREGA_GRAFO_MYSQL = True
+MAX_RECOMENDACOES_POR_MATERIA = 10
 
 DATA_INICIO = "2013-01-01 00:00:00"
 DATA_FIM    = "2013-02-01 00:00:00"
@@ -460,8 +461,8 @@ def atualiza_execucao(id_execucao, materias, g_nos, g_arestas):
 	_id = cursor.lastrowid
 	db.commit()
 
-def analisa_resultado(id_execucao):
-	acertos = 0
+def analisa_resultado(id_execucao, max_recomendacoes_por_materia):
+	_acertos = 0
 	cursor.execute("""
 		select origem, count(*)
 		from materias
@@ -478,8 +479,8 @@ def analisa_resultado(id_execucao):
 			where id_execucao = %s
 			and origem = %s
 			order by score_final desc
-			limit 5
-			""", (id_execucao, i[0]) )
+			limit %s
+			""", (id_execucao, i[0], max_recomendacoes_por_materia))
 
 		res = cursor.fetchall()
 
@@ -500,11 +501,16 @@ def analisa_resultado(id_execucao):
 		materias_saibamais = cursor.fetchall()
 
 		if len(materias_saibamais) > 0:
-			acertos += 1
+			_acertos += 1
 			print i[0]
 			print "  ", ", ".join(materias_saibamais[0])
 
-	print "\nAcertos:", acertos
+	update = """update execucao set max_recomendacoes_por_materia = %s, acertos = %s where id = %s; """
+	data = (max_recomendacoes_por_materia, _acertos, id_execucao )
+	cursor.execute(update, data)
+	db.commit()
+
+	return _acertos
 
 		
 
@@ -587,7 +593,8 @@ if __name__ == '__main__':
 		gera_imagem(G)
 
 	print "Analizando resultado..."
-	analisa_resultado(id_execucao)
+	acertos = analisa_resultado(id_execucao, MAX_RECOMENDACOES_POR_MATERIA)
+	print acertos, "acertos de ", total_materias, "matérias."
 
 	stop = timeit.default_timer()
 	tempo_execucao = stop - start 

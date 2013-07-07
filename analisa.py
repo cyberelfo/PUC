@@ -2,23 +2,22 @@
 import MySQLdb
 import sys
 
-EXECUCAO_ID = 92
-
 if __name__ == '__main__':
-
-	EXECUCAO_ID = sys.argv[1]
-
-	acertos = 0
 
 	db = MySQLdb.connect("localhost","root","","PUC" )
 	cursor = db.cursor()
 
+	max_recomendacoes_por_materia = 10
+
+	id_execucao = sys.argv[1]
+
+	_acertos = 0
 	cursor.execute("""
 		select origem, count(*)
 		from materias
 		where id_execucao = %s
 		group by origem
-		""", (EXECUCAO_ID) )
+		""", (id_execucao) )
 
 	materias_origem = cursor.fetchall()
 
@@ -29,8 +28,8 @@ if __name__ == '__main__':
 			where id_execucao = %s
 			and origem = %s
 			order by score_final desc
-			limit 5
-			""", (EXECUCAO_ID, i[0]) )
+			limit %s
+			""", (id_execucao, i[0], max_recomendacoes_por_materia) )
 
 		res = cursor.fetchall()
 
@@ -38,24 +37,30 @@ if __name__ == '__main__':
 
 		# import pdb; pdb.set_trace()
 
-
 		sql = """
 			select distinct materia_principal
 			from materias_saibamais
 			where id_execucao = %s
 			and materia_principal = '%s'
-			and materia_saibamais in (%s) ;
-			""" % (EXECUCAO_ID, i[0], materias_destino)
+			and materia_saibamais in (%s);
+			""" % (id_execucao, i[0], materias_destino) 
 
 		cursor.execute(sql)
 
 		materias_saibamais = cursor.fetchall()
 
 		if len(materias_saibamais) > 0:
-			acertos += 1
+			_acertos += 1
 			print i[0]
 			print "  ", ", ".join(materias_saibamais[0])
-	print "Acertos:", acertos
+
+	update = """update execucao set max_recomendacoes_por_materia = %s, acertos = %s where id = %s; """
+	data = (max_recomendacoes_por_materia, _acertos, id_execucao )
+	cursor.execute(update, data)
+	db.commit()
+
+	print "Acertos:", _acertos
+
 
 
 
