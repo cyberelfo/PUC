@@ -4,7 +4,7 @@ import networkx as nx
 from networkx.exception import NetworkXError
 import MySQLdb
 import timeit
-from sys import stdout
+from sys import stdout, argv
 
 IMAGEM_ON = False
 MAX_TRIPLAS = 1000000
@@ -18,7 +18,7 @@ CARREGA_GRAFO_MYSQL = True
 
 DATA_INICIO = "2013-01-01 00:00:00"
 DATA_FIM    = "2013-02-01 00:00:00"
-EDITORIA 	= 94
+EDITORIA 	= argv[1]
 
 def gera_imagem(G):
 	import matplotlib.pyplot as plt
@@ -200,29 +200,25 @@ def calcula_path(lista_materias, G, max_path, salva_paths):
 	for m1 in origem:
 		_processando += 1
 		print "Processando matéria", _processando, "de", _total
-		# print "Entidades M1:", len(lista_materias[m1])
-		# stdout.write("Entidades M2: ")
+		# print "Materia M1:", m1
 		destino.remove(m1)
 		for m2 in destino:
-			# stdout.write(str(len(lista_materias[m2]))) 
+			# print "  Materia M2:", m2
 			if not _uniao.has_key(m1+'.'+m2):
 				_uniao[m1+'.'+m2] = 0
 				_scores[m1+'.'+m2] = 0			
 			for e1 in lista_materias[m1]:
+				# print "    ", e1
 				for e2 in lista_materias[m2]:
-					# stdout.write(".")
-					# stdout.write("\n" + e1 + " " + e2)
-					# stdout.flush()
+					# print "      ", e2
 					search += 1
 					if e1 == e2:
-						# stdout.write(" Same\n")
 						_uniao[m1+'.'+m2] += 1
 						_paths[e1+'.'+e2] = []
+						# print _uniao[m1+'.'+m2]
 					elif _paths.has_key(e1+'.'+e2):
-						# stdout.write(" Hit\n")
 						hit += 1
 					else:
-						# stdout.write(" Search ")	
 						try:							
 							# start_p = timeit.default_timer()
 							_paths[e1+'.'+e2] = list(nx.all_simple_paths(G, source=e1, target=e2, cutoff=max_path))
@@ -256,12 +252,12 @@ def calcula_path(lista_materias, G, max_path, salva_paths):
 						else:
 							_scores[m1+'.'+m2] = _score
 
-			if _scores[m1+'.'+m2] > 0:
-				_score_final = (_scores[m1+'.'+m2] + _uniao[m1+'.'+m2]) * (1.0 / (len(lista_materias[m1]) * len(lista_materias[m2])) )
-				_sql = """INSERT INTO materias (id_execucao, origem, destino, score, entidades_origem, entidades_destino, intercessao, score_final) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);"""
-				_data = (id_execucao, m1, m2, _scores[m1+'.'+m2], len(lista_materias[m1]), len(lista_materias[m2]), _uniao[m1+'.'+m2], _score_final)
-				cursor.execute(_sql, _data)
-				db.commit()
+			# if _scores[m1+'.'+m2] > 0:
+			_score_final = (_scores[m1+'.'+m2] + _uniao[m1+'.'+m2]) * (1.0 / (len(lista_materias[m1]) * len(lista_materias[m2])) )
+			_sql = """INSERT INTO materias (id_execucao, origem, destino, score, entidades_origem, entidades_destino, intercessao, score_final) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);"""
+			_data = (id_execucao, m1, m2, _scores[m1+'.'+m2], len(lista_materias[m1]), len(lista_materias[m2]), _uniao[m1+'.'+m2], _score_final)
+			cursor.execute(_sql, _data)
+			db.commit()
 
 	print ""
 	print "Search:", search, "Hit:", hit
@@ -321,7 +317,7 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria):
 			referencias = [(li.text,li.a['href']) for li in soup.ul if type(li) == Tag]
 		except:
 			referencias = []
-			print "Com erro no saiba mais:", materia[0]
+			# print "Com erro no saiba mais:", materia[0]
 
 		# Pega a URI da matéria principal no Virtuoso
 		_materias_G1 = """ 
@@ -334,15 +330,30 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria):
 		
 		triplas = roda_query(_materias_G1)
 
-		_materia_principal = ''
+		_uri_materia_principal = ''
 		_entidades_materias = []
 		_entidades_tmp = []
 
 		# cria uma lista para guardar todas as matérias, começando pela principal
 		if len(triplas) > 0:
-			_materia_principal = triplas[0]['s']['value']
-			_entidades_materias = [("http://g1.globo.com" + materia[0])]
-			# print ">>>", _materia_principal
+			_uri_materia_principal = triplas[0]['s']['value']
+			_materias_G1 = """ 
+				SELECT ?s ?p ?o
+				FROM <http://semantica.globo.com/G1/>
+				WHERE {?s a <http://semantica.globo.com/G1/Materia> .
+				       ?s <http://semantica.globo.com/base/permalink> "%s" .
+				       ?s ?p ?o 
+				filter (isURI(?o) && !isBlank(?o))
+				filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
+				filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
+				} 
+				order by ?s
+			""" % ("http://g1.globo.com" + materia[0])
+			
+			triplas = roda_query(_materias_G1)
+			_entidades_tmp = triplas
+			# _entidades_materias = [("http://g1.globo.com" + materia[0])]
+			# print "_uri_materia_principal:", _uri_materia_principal
 			for ref in referencias:
 				_entidades_materias.append(ref[1])
 		# else:
@@ -368,12 +379,12 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria):
 				db.rollback()
 				break
 
-			_materia_saibamais = triplas[0]['s']['value']
+			_uri_materia_saibamais = triplas[0]['s']['value']
+			# print "_uri_materia_saibamais:", _uri_materia_saibamais
 
-			if _materia_principal != _materia_saibamais:
-				_sql = """INSERT INTO materias_saibamais (id_execucao, materia_principal, materia_saibamais) VALUES (%s, %s, %s);"""
-				_data = (id_execucao, _materia_principal, _materia_saibamais)
-				cursor.execute(_sql, _data)
+			_sql = """INSERT INTO materias_saibamais (id_execucao, materia_principal, materia_saibamais) VALUES (%s, %s, %s);"""
+			_data = (id_execucao, _uri_materia_principal, _uri_materia_saibamais)
+			cursor.execute(_sql, _data)
 
 			# _materias_tmp = []
 			_materias_G1 = """ 
@@ -390,17 +401,28 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria):
 			""" % (i)
 			
 			triplas = roda_query(_materias_G1)
+			# print ""
+			# print _uri_materia_saibamais
+			# print "  ", [x['s']['value'] + " >>> " + x['o']['value'] for x in triplas]
 
-			# print ">>> ", triplas
 
 			_entidades_tmp = _entidades_tmp + triplas
+
+			# print ""
+			# print "  ", [x['s']['value'] + " >>> " + x['o']['value'] for x in _entidades_tmp]
+
+			# print len(_entidades_tmp)
 		
 		db.commit()
 		_entidades = _entidades + _entidades_tmp
 
+		# print "  ", len(_entidades)
+
 	db_g1.close()
 
 	_materias_order = sorted(_entidades, key=lambda k: k['s']['value']) 
+
+	# print "      ", len(_materias_order)
 
 	_lista_materias = {}
 
@@ -412,6 +434,12 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria):
 			_old_value = i["s"]["value"]
 		else:
 			_lista_materias[i["s"]["value"]].append(i["o"]["value"])
+
+	# Remove valores duplicados nas
+	for i in _lista_materias:
+		_lista_materias[i] = list(set(_lista_materias[i]))
+
+	# import pdb; pdb.set_trace()
 
 	return _lista_materias
 
@@ -431,6 +459,54 @@ def atualiza_execucao(id_execucao, materias, g_nos, g_arestas):
 	cursor.execute(_sql, _data)
 	_id = cursor.lastrowid
 	db.commit()
+
+def analisa_resultado(id_execucao):
+	acertos = 0
+	cursor.execute("""
+		select origem, count(*)
+		from materias
+		where id_execucao = %s
+		group by origem
+		""", (id_execucao) )
+
+	materias_origem = cursor.fetchall()
+
+	for i in materias_origem:
+		cursor.execute("""
+			select destino
+			from materias
+			where id_execucao = %s
+			and origem = %s
+			order by score_final desc
+			limit 5
+			""", (id_execucao, i[0]) )
+
+		res = cursor.fetchall()
+
+		materias_destino = (', '.join('"' + x[0] + '"' for x in res))
+
+		# import pdb; pdb.set_trace()
+
+		sql = """
+			select distinct materia_principal
+			from materias_saibamais
+			where id_execucao = %s
+			and materia_principal = '%s'
+			and materia_saibamais in (%s);
+			""" % (id_execucao, i[0], materias_destino) 
+
+		cursor.execute(sql)
+
+		materias_saibamais = cursor.fetchall()
+
+		if len(materias_saibamais) > 0:
+			acertos += 1
+			print i[0]
+			print "  ", ", ".join(materias_saibamais[0])
+
+	print "\nAcertos:", acertos
+
+		
 
 ##########################
 ### Inicio do programa ###
@@ -502,11 +578,16 @@ if __name__ == '__main__':
 
 	print "Calculando os paths..."
 
+	# import pdb; pdb.set_trace()
+
 	calcula_path(lista_materias, G, MAX_PATH, SALVA_PATHS)
 
 
 	if IMAGEM_ON:
 		gera_imagem(G)
+
+	print "Analizando resultado..."
+	analisa_resultado(id_execucao)
 
 	stop = timeit.default_timer()
 	tempo_execucao = stop - start 

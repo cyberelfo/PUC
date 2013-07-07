@@ -8,6 +8,8 @@ if __name__ == '__main__':
 
 	EXECUCAO_ID = sys.argv[1]
 
+	acertos = 0
+
 	db = MySQLdb.connect("localhost","root","","PUC" )
 	cursor = db.cursor()
 
@@ -21,7 +23,6 @@ if __name__ == '__main__':
 	materias_origem = cursor.fetchall()
 
 	for i in materias_origem:
-		print i[0]
 		cursor.execute("""
 			select destino
 			from materias
@@ -37,18 +38,24 @@ if __name__ == '__main__':
 
 		# import pdb; pdb.set_trace()
 
-		cursor.execute("""
+
+		sql = """
 			select distinct materia_principal
 			from materias_saibamais
 			where id_execucao = %s
-			and materia_principal = %s
-			and materia_saibamais in (%s)
-			""", (EXECUCAO_ID, i[0], materias_destino) )
+			and materia_principal = '%s'
+			and materia_saibamais in (%s) ;
+			""" % (EXECUCAO_ID, i[0], materias_destino)
+
+		cursor.execute(sql)
 
 		materias_saibamais = cursor.fetchall()
 
-		print materias_saibamais
-		
+		if len(materias_saibamais) > 0:
+			acertos += 1
+			print i[0]
+			print "  ", ", ".join(materias_saibamais[0])
+	print "Acertos:", acertos
 
 
 
