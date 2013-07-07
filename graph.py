@@ -8,7 +8,7 @@ from sys import stdout, argv
 
 IMAGEM_ON = False
 MAX_TRIPLAS = 1000000
-MAX_MATERIAS = 10000
+MAX_MATERIAS = 100
 SUPER_NODE = 1000
 MAX_PATH = 3
 SALVA_PATHS = False
@@ -264,7 +264,7 @@ def calcula_path(lista_materias, G, max_path, salva_paths):
 	print "Search:", search, "Hit:", hit
 
 
-def busca_materias_saibamais(data_inicio, data_fim, editoria):
+def busca_materias_saibamais(data_inicio, data_fim, editoria, max_materias):
 	""" Busca as materias relacionadas à matéria principal pelo componente "Saiba Mais" """
 	from lxml import etree
 	import lxml.html as lh
@@ -292,13 +292,17 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria):
 					and m.primeira_publicacao < '%s'
 					and m.id = mf.materia_id
 					and mf.folder_id = %s
-					and corpo like '%%<div class="saibamais componente_materia">%%';
-					""" % (data_inicio, data_fim, editoria)
+					and corpo like '%%<div class="saibamais componente_materia">%%'
+					limit %s;
+					""" % (data_inicio, data_fim, editoria, max_materias)
 
 	cursor_g1.execute(_sql_materias)
 
 	materias = cursor_g1.fetchall()
 
+
+	print "buscando dados no Virtuoso..."
+	
 	# Para cada corpo de matéria vai extrair os links "Saiba Mais"
 	for materia in materias:
 		myparser = etree.HTMLParser(encoding="utf-8")
@@ -489,7 +493,7 @@ def analisa_resultado(id_execucao, max_recomendacoes_por_materia):
 		# import pdb; pdb.set_trace()
 
 		sql = """
-			select distinct materia_principal
+			select distinct materia_saibamais
 			from materias_saibamais
 			where id_execucao = %s
 			and materia_principal = '%s'
@@ -532,7 +536,7 @@ if __name__ == '__main__':
 	print "Busca materias..."
 
 	# lista_materias = busca_materias(NOME_PRODUTO, DATA_INICIO, DATA_FIM, MAX_MATERIAS)
-	lista_materias = busca_materias_saibamais(DATA_INICIO, DATA_FIM, EDITORIA)
+	lista_materias = busca_materias_saibamais(DATA_INICIO, DATA_FIM, EDITORIA, MAX_MATERIAS)
 
 	# import pdb; pdb.set_trace()
 

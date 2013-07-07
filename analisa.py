@@ -38,12 +38,13 @@ if __name__ == '__main__':
 		# import pdb; pdb.set_trace()
 
 		sql = """
-			select distinct materia_principal
+			select distinct materia_saibamais
 			from materias_saibamais
 			where id_execucao = %s
 			and materia_principal = '%s'
 			and materia_saibamais in (%s);
 			""" % (id_execucao, i[0], materias_destino) 
+
 
 		cursor.execute(sql)
 
