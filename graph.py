@@ -9,14 +9,16 @@ from sys import stdout
 IMAGEM_ON = False
 MAX_TRIPLAS = 1000000
 MAX_MATERIAS = 10000
-SUPER_NODE = 500
+SUPER_NODE = 1000
 MAX_PATH = 3
 SALVA_PATHS = False
 NOME_PRODUTO = "G1"
 # NOME_PRODUTO = "esportes"
+CARREGA_GRAFO_MYSQL = True
 
-DATA_INICIO = "2013-03-01T00:00:00Z"
-DATA_FIM    = "2013-03-02T00:00:00Z"
+DATA_INICIO = "2013-01-01 00:00:00"
+DATA_FIM    = "2013-03-01 00:00:00"
+EDITORIA 	= 42
 
 def gera_imagem(G):
 	import matplotlib.pyplot as plt
@@ -162,6 +164,18 @@ def carrega_grafo(grafo, items):
 		grafo.add_node(i["o"]["value"])
 		grafo.add_edge(i["s"]["value"],i["o"]["value"], uri=i["p"]["value"])
 	
+def carrega_grafo_from_mysql(grafo):
+	cursor.execute("""
+					select s, p, o 
+					from grafo ;
+					""")
+
+	items = cursor.fetchall()
+	for i in items:
+		grafo.add_node(i[0])
+		grafo.add_node(i[2])
+		grafo.add_edge(i[0],i[2])
+
 def cria_grafo():
 	return nx.Graph()
 
@@ -197,25 +211,25 @@ def calcula_path(lista_materias, G, max_path, salva_paths):
 			for e1 in lista_materias[m1]:
 				for e2 in lista_materias[m2]:
 					# stdout.write(".")
-					stdout.write("\n" + e1 + " " + e2)
-					stdout.flush()
+					# stdout.write("\n" + e1 + " " + e2)
+					# stdout.flush()
 					search += 1
 					if e1 == e2:
-						stdout.write(" Same\n")
+						# stdout.write(" Same\n")
 						_uniao[m1+'.'+m2] += 1
 						_paths[e1+'.'+e2] = []
 					elif _paths.has_key(e1+'.'+e2):
-						stdout.write(" Hit\n")
+						# stdout.write(" Hit\n")
 						hit += 1
 					else:
-						stdout.write(" Search ")	
+						# stdout.write(" Search ")	
 						try:							
-							start_p = timeit.default_timer()
+							# start_p = timeit.default_timer()
 							_paths[e1+'.'+e2] = list(nx.all_simple_paths(G, source=e1, target=e2, cutoff=max_path))
 							_paths[e2+'.'+e1] = _paths[e1+'.'+e2]
-							stop_p = timeit.default_timer()
-							stdout.write(" " + str(stop_p - start_p) + " ")
-							stdout.write(str(len(_paths[e1+'.'+e2])) + "\n")
+							# stop_p = timeit.default_timer()
+							# stdout.write(" " + str(stop_p - start_p) + " ")
+							# stdout.write(str(len(_paths[e1+'.'+e2])) + "\n")
 						except NetworkXError:
 							_paths[e1+'.'+e2] = []
 							_paths[e2+'.'+e1] = _paths[e1+'.'+e2]
@@ -224,7 +238,7 @@ def calcula_path(lista_materias, G, max_path, salva_paths):
 						s3 = 0
 						s4 = 0
 						for _path in _paths[e1+'.'+e2]:
-							stdout.write(".")
+							# stdout.write(".")
 							if salva_paths:
 								_sql = """INSERT INTO individuos (id_execucao, origem, destino, path, tamanho) VALUES (%s, %s, %s, %s, %s);"""
 								_data = (id_execucao, m1, m2, ','.join(_path), str(len(_path)))
@@ -255,6 +269,7 @@ def calcula_path(lista_materias, G, max_path, salva_paths):
 
 
 def busca_materias_saibamais():
+	""" Busca as materias relacionadas à matéria principal pelo componente "Saiba Mais" """
 	from lxml import etree
 	import lxml.html as lh
 	from BeautifulSoup import BeautifulSoup, Tag
@@ -262,18 +277,23 @@ def busca_materias_saibamais():
 	_materias = []
 	materia_nao_encontrada = False
 
+	# Busca as matérias do MySQL que tem o componente "Saiba Mais"
 	db_g1 = MySQLdb.connect("localhost","root","","g1" )
 	cursor_g1 = db_g1.cursor()
-	cursor_g1.execute("""
+	_sql_materias = """
 					select permalink, corpo from materia m, materia_folder mf
-					where m.primeira_publicacao >= '2013-03-07 00:00:00'
-					and m.primeira_publicacao < '2013-03-11 00:00:00'
+					where m.primeira_publicacao >= '%s'
+					and m.primeira_publicacao < '%s'
 					and m.id = mf.materia_id
-					and mf.folder_id = 42
-					and corpo like '%<div class="saibamais componente_materia">%';
-					""")
+					and mf.folder_id = %s
+					and corpo like '%%<div class="saibamais componente_materia">%%';
+					""" % (DATA_INICIO, DATA_FIM, EDITORIA)
+
+	cursor_g1.execute(_sql_materias)
 
 	materias = cursor_g1.fetchall()
+
+	# Para cada corpo de matéria vai extrair os links "Saiba Mais"
 	for materia in materias:
 		myparser = etree.HTMLParser(encoding="utf-8")
 		tree = etree.HTML(materia[1], parser=myparser)
@@ -294,6 +314,7 @@ def busca_materias_saibamais():
 			referencias = []
 			print "Com erro no saiba mais:", materia[0]
 
+		# Pega a URI da matéria principal no Virtuoso
 		_materias_G1 = """ 
 		SELECT ?s 
 		FROM <http://semantica.globo.com/G1/>
@@ -306,14 +327,14 @@ def busca_materias_saibamais():
 
 		_materia_principal = ''
 		_lista_materias = []
+		_materias_tmp = []
 
+		# cria uma lista com todas as matérias
 		if len(triplas) > 0:
-
 			_materia_principal = triplas[0]['s']['value']
 			_lista_materias = [("http://g1.globo.com" + materia[0])]
-
-		for ref in referencias:
-			_lista_materias.append(ref[1])
+			for ref in referencias:
+				_lista_materias.append(ref[1])
 
 		for i in _lista_materias:
 
@@ -337,7 +358,6 @@ def busca_materias_saibamais():
 			if _materia_principal != _materia_saibamais:
 				_sql = """INSERT INTO materias_saibamais (id_execucao, materia_principal, materia_saibamais) VALUES (%s, %s, %s);"""
 				_data = (id_execucao, _materia_principal, _materia_saibamais)
-				print _data
 				cursor.execute(_sql, _data)
 
 			_materias_tmp = []
@@ -423,25 +443,30 @@ if __name__ == '__main__':
 
 	print "Total de materias: ", total_materias
 
-	print "Busca triplas produto..."
-
-	entidades = busca_entidades(NOME_PRODUTO, MAX_TRIPLAS)
-
-	print "Carregando o grafo produto..."
-
 	G = cria_grafo()
-	carrega_grafo(G, entidades)
 
-	print("O grafo tem %d nos com %d arestas"\
-	          %(nx.number_of_nodes(G),nx.number_of_edges(G)))
+	if CARREGA_GRAFO_MYSQL:
+		carrega_grafo_from_mysql(G)
+	else:
 
-	print "Buscando as triplas Base..."
+		print "Busca triplas produto..."
 
-	entidades = busca_entidades("base", MAX_TRIPLAS)
+		entidades = busca_entidades(NOME_PRODUTO, MAX_TRIPLAS)
 
-	print "Carregando o grafo Base..."
+		print "Carregando o grafo produto..."
 
-	carrega_grafo(G, entidades)
+		carrega_grafo(G, entidades)
+
+		print("O grafo tem %d nos com %d arestas"\
+		          %(nx.number_of_nodes(G),nx.number_of_edges(G)))
+
+		print "Buscando as triplas Base..."
+
+		entidades = busca_entidades("base", MAX_TRIPLAS)
+
+		print "Carregando o grafo Base..."
+
+		carrega_grafo(G, entidades)
 
 	print("O grafo tem %d nos com %d arestas"\
 	          %(nx.number_of_nodes(G),nx.number_of_edges(G)))
