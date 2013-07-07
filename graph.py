@@ -17,8 +17,8 @@ NOME_PRODUTO = "G1"
 CARREGA_GRAFO_MYSQL = True
 
 DATA_INICIO = "2013-01-01 00:00:00"
-DATA_FIM    = "2013-03-01 00:00:00"
-EDITORIA 	= 42
+DATA_FIM    = "2013-02-01 00:00:00"
+EDITORIA 	= 94
 
 def gera_imagem(G):
 	import matplotlib.pyplot as plt
@@ -262,24 +262,33 @@ def calcula_path(lista_materias, G, max_path, salva_paths):
 				_data = (id_execucao, m1, m2, _scores[m1+'.'+m2], len(lista_materias[m1]), len(lista_materias[m2]), _uniao[m1+'.'+m2], _score_final)
 				cursor.execute(_sql, _data)
 				db.commit()
-		print ""
 
 	print ""
 	print "Search:", search, "Hit:", hit
 
 
-def busca_materias_saibamais():
+def busca_materias_saibamais(data_inicio, data_fim, editoria):
 	""" Busca as materias relacionadas à matéria principal pelo componente "Saiba Mais" """
 	from lxml import etree
 	import lxml.html as lh
 	from BeautifulSoup import BeautifulSoup, Tag
 
-	_materias = []
-	materia_nao_encontrada = False
+	_entidades = []
 
 	# Busca as matérias do MySQL que tem o componente "Saiba Mais"
 	db_g1 = MySQLdb.connect("localhost","root","","g1" )
 	cursor_g1 = db_g1.cursor()
+
+
+	cursor_g1.execute(""" select name_txt from folder where folder_id = %s ;""" % (EDITORIA))
+	_editoria = cursor_g1.fetchone()
+
+
+	update = """update execucao set editoria = %s where id = %s; """
+	data = (_editoria[0], id_execucao)
+	cursor.execute(update, data)
+	db.commit()
+
 	_sql_materias = """
 					select permalink, corpo from materia m, materia_folder mf
 					where m.primeira_publicacao >= '%s'
@@ -287,7 +296,7 @@ def busca_materias_saibamais():
 					and m.id = mf.materia_id
 					and mf.folder_id = %s
 					and corpo like '%%<div class="saibamais componente_materia">%%';
-					""" % (DATA_INICIO, DATA_FIM, EDITORIA)
+					""" % (data_inicio, data_fim, editoria)
 
 	cursor_g1.execute(_sql_materias)
 
@@ -326,17 +335,20 @@ def busca_materias_saibamais():
 		triplas = roda_query(_materias_G1)
 
 		_materia_principal = ''
-		_lista_materias = []
-		_materias_tmp = []
+		_entidades_materias = []
+		_entidades_tmp = []
 
-		# cria uma lista com todas as matérias
+		# cria uma lista para guardar todas as matérias, começando pela principal
 		if len(triplas) > 0:
 			_materia_principal = triplas[0]['s']['value']
-			_lista_materias = [("http://g1.globo.com" + materia[0])]
+			_entidades_materias = [("http://g1.globo.com" + materia[0])]
+			# print ">>>", _materia_principal
 			for ref in referencias:
-				_lista_materias.append(ref[1])
+				_entidades_materias.append(ref[1])
+		# else:
+		# 	print ">>> Materia principal não está no virtuoso"
 
-		for i in _lista_materias:
+		for i in _entidades_materias:
 
 			_materias_G1 = """ 
 			SELECT ?s 
@@ -348,8 +360,11 @@ def busca_materias_saibamais():
 			
 			triplas = roda_query(_materias_G1)
 
+			# import pdb; pdb.set_trace()
+
 			if len(triplas) == 0:
-				print "Matéria", i, "não encontrada"
+				# print "não encontrada"
+				_entidades_tmp = []
 				db.rollback()
 				break
 
@@ -360,7 +375,7 @@ def busca_materias_saibamais():
 				_data = (id_execucao, _materia_principal, _materia_saibamais)
 				cursor.execute(_sql, _data)
 
-			_materias_tmp = []
+			# _materias_tmp = []
 			_materias_G1 = """ 
 			SELECT ?s ?p ?o
 			FROM <http://semantica.globo.com/G1/>
@@ -376,14 +391,16 @@ def busca_materias_saibamais():
 			
 			triplas = roda_query(_materias_G1)
 
-			_materias_tmp = _materias_tmp + triplas
+			# print ">>> ", triplas
+
+			_entidades_tmp = _entidades_tmp + triplas
 		
 		db.commit()
-		_materias = _materias + _materias_tmp
+		_entidades = _entidades + _entidades_tmp
 
 	db_g1.close()
 
-	_materias_order = sorted(_materias, key=lambda k: k['s']['value']) 
+	_materias_order = sorted(_entidades, key=lambda k: k['s']['value']) 
 
 	_lista_materias = {}
 
@@ -395,6 +412,7 @@ def busca_materias_saibamais():
 			_old_value = i["s"]["value"]
 		else:
 			_lista_materias[i["s"]["value"]].append(i["o"]["value"])
+
 	return _lista_materias
 
 
@@ -426,12 +444,13 @@ if __name__ == '__main__':
 	db = MySQLdb.connect("localhost","root","","PUC" )
 	cursor = db.cursor()
 
+
 	id_execucao = grava_execucao(NOME_PRODUTO, DATA_INICIO, DATA_FIM, SUPER_NODE, MAX_PATH)
 
 	print "Busca materias..."
 
 	# lista_materias = busca_materias(NOME_PRODUTO, DATA_INICIO, DATA_FIM, MAX_MATERIAS)
-	lista_materias = busca_materias_saibamais()
+	lista_materias = busca_materias_saibamais(DATA_INICIO, DATA_FIM, EDITORIA)
 
 	# import pdb; pdb.set_trace()
 
@@ -446,6 +465,7 @@ if __name__ == '__main__':
 	G = cria_grafo()
 
 	if CARREGA_GRAFO_MYSQL:
+		print "Carregando o grafo salvo no MySQL..."
 		carrega_grafo_from_mysql(G)
 	else:
 
