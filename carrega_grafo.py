@@ -46,7 +46,7 @@ def busca_entidades(produto, max_triplas):
 		filter (isURI(?o) && !isBlank(?o))
 		filter (!isBlank(?s)) 
 		filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>)
-		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
+		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> && ?p != <http://www.w3.org/2000/01/rdf-schema#subClassOf>)
 	    filter not exists {?s a <http://semantica.globo.com/G1/Materia>}
 	    filter not exists {?s a <http://semantica.globo.com/G1/GaleriaDeFotos>}
 	    filter not exists {?s a <http://semantica.globo.com/G1/Conteudo>}
@@ -67,7 +67,7 @@ def busca_entidades(produto, max_triplas):
 		filter (isURI(?o) && !isBlank(?o))
 		filter (!isBlank(?s)) 
 		filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
-		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
+		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> && ?p != <http://www.w3.org/2000/01/rdf-schema#subClassOf>)
 	    filter not exists {?s a <http://semantica.globo.com/esportes/MateriaEsporte>}	
 	    filter not exists {?s a <http://semantica.globo.com/esportes/GaleriaDeFotos>}	
 	    filter not exists {?s a <http://semantica.globo.com/esportes/Guia>}	

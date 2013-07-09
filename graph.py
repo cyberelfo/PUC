@@ -8,7 +8,7 @@ from sys import stdout, argv
 
 IMAGEM_ON = False
 MAX_TRIPLAS = 1000000
-MAX_MATERIAS = 100
+MAX_MATERIAS = 200
 SUPER_NODE = 1000
 MAX_PATH = 3
 SALVA_PATHS = False
@@ -43,7 +43,7 @@ def busca_materias(produto, data_inicio, data_fim, max_materias):
 		       ?p ?o 
 		filter (isURI(?o) && !isBlank(?o))
 		filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
-		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
+		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> && ?p != <http://www.w3.org/2000/01/rdf-schema#subClassOf>)
 		filter (?data >= "%s"^^xsd:dateTime && ?data < "%s"^^xsd:dateTime)
 		} 
 		order by ?s
@@ -59,7 +59,7 @@ def busca_materias(produto, data_inicio, data_fim, max_materias):
 		       ?p ?o 
 		filter (isURI(?o) && !isBlank(?o))
 		filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
-		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
+		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> && ?p != <http://www.w3.org/2000/01/rdf-schema#subClassOf>)
 		filter (?data >= "%s"^^xsd:dateTime && ?data < "%s"^^xsd:dateTime)
 		} 
 		order by ?s
@@ -94,7 +94,7 @@ def busca_entidades(produto, max_triplas):
 		filter (isURI(?o) && !isBlank(?o))
 		filter (!isBlank(?s)) 
 		filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
-		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
+		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> && ?p != <http://www.w3.org/2000/01/rdf-schema#subClassOf>)
 	    filter not exists {?s a <http://semantica.globo.com/esportes/MateriaEsporte>}	
 	    filter not exists {?s a <http://semantica.globo.com/esportes/GaleriaDeFotos>}	
 	    filter not exists {?s a <http://semantica.globo.com/esportes/Guia>}	
@@ -115,7 +115,7 @@ def busca_entidades(produto, max_triplas):
 		filter (isURI(?o) && !isBlank(?o))
 		filter (!isBlank(?s)) 
 		filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>)
-		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
+		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> && ?p != <http://www.w3.org/2000/01/rdf-schema#subClassOf>)
 	    filter not exists {?s a <http://semantica.globo.com/G1/Materia>}
 	    filter not exists {?s a <http://semantica.globo.com/G1/GaleriaDeFotos>}
 	    filter not exists {?s a <http://semantica.globo.com/G1/Conteudo>}
@@ -136,7 +136,7 @@ def busca_entidades(produto, max_triplas):
 		filter (isURI(?o) && !isBlank(?o))
 		filter (!isBlank(?s)) 
 		filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
-		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
+		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> && ?p != <http://www.w3.org/2000/01/rdf-schema#subClassOf>)
 	    filter not exists {?s a <http://semantica.globo.com/esportes/MateriaEsporte>}	
 	    filter not exists {?s a <http://semantica.globo.com/esportes/GaleriaDeFotos>}	
 	    filter not exists {?s a <http://semantica.globo.com/esportes/Guia>}	
@@ -276,16 +276,6 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria, max_materias):
 	db_g1 = MySQLdb.connect("localhost","root","","g1" )
 	cursor_g1 = db_g1.cursor()
 
-
-	cursor_g1.execute(""" select name_txt from folder where folder_id = %s ;""" % (EDITORIA))
-	_editoria = cursor_g1.fetchone()
-
-
-	update = """update execucao set editoria = %s where id = %s; """
-	data = (_editoria[0], id_execucao)
-	cursor.execute(update, data)
-	db.commit()
-
 	_sql_materias = """
 					select permalink, corpo from materia m, materia_folder mf
 					where m.primeira_publicacao >= '%s'
@@ -302,7 +292,7 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria, max_materias):
 
 
 	print "buscando dados no Virtuoso..."
-	
+
 	# Para cada corpo de matéria vai extrair os links "Saiba Mais"
 	for materia in materias:
 		myparser = etree.HTMLParser(encoding="utf-8")
@@ -350,9 +340,8 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria, max_materias):
 				       ?s ?p ?o 
 				filter (isURI(?o) && !isBlank(?o))
 				filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
-				filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
+				filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> && ?p != <http://www.w3.org/2000/01/rdf-schema#subClassOf>)
 				} 
-				order by ?s
 			""" % ("http://g1.globo.com" + materia[0])
 			
 			triplas = roda_query(_materias_G1)
@@ -400,9 +389,8 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria, max_materias):
 			       ?s ?p ?o 
 			filter (isURI(?o) && !isBlank(?o))
 			filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
-			filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)
+			filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> && ?p != <http://www.w3.org/2000/01/rdf-schema#subClassOf>)
 			} 
-			order by ?s
 			""" % (i)
 			
 			triplas = roda_query(_materias_G1)
@@ -450,9 +438,9 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria, max_materias):
 
 
 
-def grava_execucao(produto, dt_inicio, dt_fim, supernode, max_path):
-	_sql = """INSERT INTO execucao (produto, dt_inicio, dt_fim, supernode, max_path) VALUES (%s, %s, %s, %s, %s);"""
-	_data = (produto, dt_inicio, dt_fim, supernode, max_path)
+def grava_execucao(produto, dt_inicio, dt_fim, supernode, max_path, editoria):
+	_sql = """INSERT INTO execucao (produto, dt_inicio, dt_fim, supernode, max_path, editoria) VALUES (%s, %s, %s, %s, %s, %s);"""
+	_data = (produto, dt_inicio, dt_fim, supernode, max_path, editoria)
 	cursor.execute(_sql, _data)
 	_id = cursor.lastrowid
 	db.commit()
@@ -525,15 +513,17 @@ if __name__ == '__main__':
 
 	start = timeit.default_timer()
 
-	stdout.write("Produto: " + NOME_PRODUTO + '\n')
+	print "\nProduto: " + NOME_PRODUTO + "\n"
 
 	db = MySQLdb.connect("localhost","root","","PUC" )
 	cursor = db.cursor()
 
+	cursor.execute(""" select name_txt from g1.folder where folder_id = %s ;""" % (EDITORIA))
+	editoria = cursor.fetchone()
 
-	id_execucao = grava_execucao(NOME_PRODUTO, DATA_INICIO, DATA_FIM, SUPER_NODE, MAX_PATH)
+	id_execucao = grava_execucao(NOME_PRODUTO, DATA_INICIO, DATA_FIM, SUPER_NODE, MAX_PATH, editoria[0])
 
-	print "Busca materias..."
+	print "Busca materias de " + editoria[0] + "..."
 
 	# lista_materias = busca_materias(NOME_PRODUTO, DATA_INICIO, DATA_FIM, MAX_MATERIAS)
 	lista_materias = busca_materias_saibamais(DATA_INICIO, DATA_FIM, EDITORIA, MAX_MATERIAS)
