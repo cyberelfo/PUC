@@ -4,8 +4,8 @@ import MySQLdb
 import timeit
 
 MAX_TRIPLAS = 1000000
-NOME_PRODUTO = "G1"
-# NOME_PRODUTO = "esportes"
+# NOME_PRODUTO = "G1"
+NOME_PRODUTO = "esportes"
 
 def roda_query(query):
 	from SPARQLWrapper import SPARQLWrapper, JSON

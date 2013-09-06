@@ -26,7 +26,7 @@ CREATE TABLE `grafo` (
 ) ENGINE=MyISAM AUTO_INCREMENT=466850 DEFAULT CHARSET=latin1;
 
 -- Create syntax for TABLE 'individuos'
-CREATE TABLE `individuos` (
+CREATE TABLE `paths` (
   `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
   `id_execucao` int(11) DEFAULT NULL,
   `origem` varchar(750) DEFAULT NULL,

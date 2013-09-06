@@ -1,30 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+#Versão com alterações do Schwabe
 import networkx as nx
+import math
 from networkx.exception import NetworkXError
 import MySQLdb
 import timeit
 from sys import stdout, argv
+from conf import *
 
-IMAGEM_ON = False
-MAX_TRIPLAS = 1000000
-MAX_MATERIAS = 1000
-SUPER_NODE = 1000
-MAX_PATH = 3
-SALVA_PATHS = False
-NOME_PRODUTO = "G1"
-# NOME_PRODUTO = "esportes"
-CARREGA_GRAFO_MYSQL = True
-MAX_RECOMENDACOES_POR_MATERIA = 10
-
-DATA_INICIO = "2013-01-01 00:00:00"
-DATA_FIM    = "2013-02-01 00:00:00"
 EDITORIA 	= argv[1]
-
-def gera_imagem(G):
-	import matplotlib.pyplot as plt
-	nx.draw(G, with_labels=False)
-	plt.savefig("path.png")
 
 def roda_query(query):
 	from SPARQLWrapper import SPARQLWrapper, JSON
@@ -159,6 +145,73 @@ def busca_entidades(produto, max_triplas):
 
 	return _entidades
 
+
+def busca_schema(produto):
+
+	# import pdb; pdb.set_trace()
+
+	_query_base = """
+		SELECT ?s ?p ?o
+		from <http://semantica.globo.com/>
+		WHERE {
+		  {
+		  graph <http://semantica.globo.com/> {?s a owl:Class; rdfs:subClassOf ?o}
+		  {?o a owl:Class BIND (rdfs:subClassOf AS ?p)}
+		  filter (?o != owl:Thing )
+		  }
+		  union
+		  {
+		  graph <http://semantica.globo.com/> {?s a owl:Class}
+		  {?p rdfs:range ?o; rdfs:domain ?super.
+		    ?s rdfs:subClassOf ?super
+		    OPTION (TRANSITIVE, t_distinct, t_step('step_no') as ?n, t_min (0) )}.
+		    ?o a owl:Class
+		  }
+		filter (?s != <http://semantica.globo.com/base/Video>)
+		filter (?s != <http://semantica.globo.com/base/ConteudoAtomico>)
+		filter (?s != <http://semantica.globo.com/base/Materia>)
+		filter (?s != <http://semantica.globo.com/base/ConteudoComposto>)
+		filter (?s != <http://semantica.globo.com/base/Foto>)
+		filter (?s != <http://semantica.globo.com/base/GaleriaDeFotos>)
+		}
+		"""
+
+	_query_produto = """
+		SELECT ?s ?p ?o
+		WHERE {
+		  {
+		  graph <http://semantica.globo.com/esportes/> {?s a owl:Class; rdfs:subClassOf ?o}
+		  {?o a owl:Class BIND (rdfs:subClassOf AS ?p)}
+		  filter (?o != owl:Thing )
+		  }
+		  union
+		  {
+		  graph <http://semantica.globo.com/esportes/> {?s a owl:Class}
+		  {?p rdfs:range ?o; rdfs:domain ?super.
+		    ?s rdfs:subClassOf ?super
+		    OPTION (TRANSITIVE, t_distinct, t_step('step_no') as ?n, t_min (0) )}.
+		    ?o a owl:Class
+		  }
+		filter (?s != <http://semantica.globo.com/esportes/MateriaEsporte>)
+		filter (?s != <http://semantica.globo.com/esportes/GaleriaDeFotos>)
+		filter (?s != <http://semantica.globo.com/esportes/Guia>)
+		filter (?s != <http://semantica.globo.com/esportes/Foto>)
+		filter (?o != <http://semantica.globo.com/esportes/MateriaEsporte>)
+		filter (?o != <http://semantica.globo.com/esportes/GaleriaDeFotos>)
+		filter (?o != <http://semantica.globo.com/esportes/Guia>)
+		filter (?o != <http://semantica.globo.com/esportes/Foto>)
+		}
+		""" 
+
+	if produto == 'esportes':
+		_entidades = roda_query(_query_produto)
+	elif produto == 'base':
+		_entidades = roda_query(_query_base)
+
+	
+
+	return _entidades
+
 def carrega_grafo(grafo, items):
 	for i in items:
 		grafo.add_node(i["s"]["value"])
@@ -168,7 +221,7 @@ def carrega_grafo(grafo, items):
 def carrega_grafo_from_mysql(grafo):
 	cursor.execute("""
 					select s, p, o 
-					from grafo ;
+					from grafo;
 					""")
 
 	items = cursor.fetchall()
@@ -518,15 +571,12 @@ if __name__ == '__main__':
 	db = MySQLdb.connect("localhost","root","","PUC" )
 	cursor = db.cursor()
 
-	cursor.execute(""" select name_txt from g1.folder where folder_id = %s ;""" % (EDITORIA))
-	editoria = cursor.fetchone()
+	id_execucao = grava_execucao(NOME_PRODUTO, DATA_INICIO, DATA_FIM, SUPER_NODE, MAX_PATH, "sem editoria")
 
-	id_execucao = grava_execucao(NOME_PRODUTO, DATA_INICIO, DATA_FIM, SUPER_NODE, MAX_PATH, editoria[0])
+	print "Busca materias ..."
 
-	print "Busca materias de " + editoria[0] + "..."
-
-	# lista_materias = busca_materias(NOME_PRODUTO, DATA_INICIO, DATA_FIM, MAX_MATERIAS)
-	lista_materias = busca_materias_saibamais(DATA_INICIO, DATA_FIM, EDITORIA, MAX_MATERIAS)
+	lista_materias = busca_materias(NOME_PRODUTO, DATA_INICIO, DATA_FIM, MAX_MATERIAS)
+	# lista_materias = busca_materias_saibamais(DATA_INICIO, DATA_FIM, EDITORIA, MAX_MATERIAS)
 
 	# import pdb; pdb.set_trace()
 
@@ -567,38 +617,119 @@ if __name__ == '__main__':
 	print("O grafo tem %d nos com %d arestas"\
 	          %(nx.number_of_nodes(G),nx.number_of_edges(G)))
 
-	print "Remove super_nodes..."
-	remove_supernode(G, SUPER_NODE)
+
+
+	if CARREGA_GRAFO_MYSQL:
+		F = nx.DiGraph()
+		print "Carregando o grafo salvo no MySQL..."
+		cursor.execute("""
+						select a, b, cluster, peso, combinado
+						from grafo_schwabe ;
+						""")
+
+		items = cursor.fetchall()
+		for i in items:
+			F.add_edge(i[0], i[1], cluster = i[2], peso = i[3], combinado = i[4])
+	else:
+
+		S = cria_grafo()
+
+		print "Carregando schema produto..."
+
+		entidades = busca_schema(NOME_PRODUTO)
+
+		carrega_grafo(S, entidades)
+
+		print "Carregando schema Base..."
+
+		entidades = busca_schema("base")
+
+		carrega_grafo(S, entidades)
+
+		print("O grafo tem %d nos com %d arestas"\
+		          %(nx.number_of_nodes(S),nx.number_of_edges(S)))
+
+		node_list = nx.nodes(S)
+
+		DI = nx.DiGraph()
+
+		print "Carregando o schema..."
+
+		while len(node_list) > 1:
+			x = node_list.pop(0)
+			neighbors_x = set(nx.all_neighbors(S, x))
+			x_size = len(neighbors_x)
+			for y in node_list:
+				if y in neighbors_x:
+					neighbors_y = set(nx.all_neighbors(S, y))
+					y_size = len(neighbors_y)
+					x_y = len(list(set(neighbors_x) & set(neighbors_y)))
+					if x_y > 0:
+						c = float(x_y) / (x_size - 1)
+						p = 1 / math.sqrt(y_size)
+						cxp = c * p
+						DI.add_edge(x,y, cluster = c, peso = p, combinado = cxp)
+						c = float(x_y) / (y_size - 1)
+						p = 1 / math.sqrt(x_size)
+						cxp = c * p
+						DI.add_edge(y,x, cluster = c, peso = p, combinado = cxp)
+
+		print("O grafo tem %d nos com %d arestas"\
+		          %(nx.number_of_nodes(DI),nx.number_of_edges(DI)))
+
+		F = nx.DiGraph()
+
+		query = """
+		select ?s where {?s a <%s>}
+		"""
+		for edg in DI.edges_iter(nbunch=None, data=True):
+			print edg[0], edg[1], "%.2f" % edg[2]['cluster'], "%.2f" % edg[2]['peso'], "%.2f" % edg[2]['combinado']
+			print "Query 1"
+			edg0 = roda_query(query % edg[0])
+			print "Query 2"
+			edg1 = roda_query(query % edg[1])
+			print "Roda loop"
+			for e0 in edg0:
+				for e1 in edg1:
+					x = e0["s"]["value"]
+					y = e1["s"]["value"]
+					if G.has_edge(x, y):
+						F.add_edge(x, y, edg[2])
+						sql = """INSERT INTO grafo_schwabe (a, b, cluster, peso, combinado) VALUES (%s, %s, %s, %s, %s);"""
+						data = (x, y, edg[2]['cluster'], edg[2]['peso'], edg[2]['combinado'])
+						cursor.execute(sql, data)
+						db.commit()
+
+
 	print("O grafo tem %d nos com %d arestas"\
-      %(nx.number_of_nodes(G),nx.number_of_edges(G)))
-
-	# import pdb; pdb.set_trace()
-
-	atualiza_execucao(id_execucao, total_materias, nx.number_of_nodes(G), nx.number_of_edges(G))
-
-	print "Calculando os paths..."
-
-	# import pdb; pdb.set_trace()
-
-	calcula_path(lista_materias, G, MAX_PATH, SALVA_PATHS)
+      %(nx.number_of_nodes(F),nx.number_of_edges(F)))
+		# import pdb; pdb.set_trace()
 
 
-	if IMAGEM_ON:
-		gera_imagem(G)
+	materias = lista_materias.keys()
+	combinado = {}
 
-	print "Analizando resultado..."
-	acertos = analisa_resultado(id_execucao, MAX_RECOMENDACOES_POR_MATERIA)
-	print acertos, "acertos de ", total_materias, "matérias."
+	while len(materias) > 1:
+		# import pdb; pdb.set_trace()
+		m0 = materias.pop(0)
+		for m1 in materias:
+			print m0, m1
+			for e0 in lista_materias[m0]:
+				for e1 in lista_materias[m1]:
+					if F.has_edge(e0, e1):
+						if not combinado.has_key(m0+'.'+m1):
+							combinado[m0+'.'+m1] = 0
+						combinado[m0+'.'+m1] += F[e0][e1]["combinado"]
+			if combinado.has_key(m0+'.'+m1): 
+				query = """
+				insert into materias_schwabe (origem, destino, combinado)
+				values ('%s', '%s', %s);
+				""" % (m0, m1, combinado[m0+'.'+m1])
+				cursor.execute(query)
+				db.commit()
 
 	stop = timeit.default_timer()
 	tempo_execucao = stop - start 
-
-	update = """update execucao set tempo_execucao = %s where id = %s; """
-	data = (tempo_execucao, id_execucao)
-	cursor.execute(update, data)
-	db.commit()
-
-	# import pdb; pdb.set_trace()
 
 	cursor.close()
 
