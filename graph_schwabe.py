@@ -176,7 +176,7 @@ def busca_schema(produto):
 		}
 		"""
 
-	_query_produto = """
+	_query_esportes = """
 		SELECT ?s ?p ?o
 		WHERE {
 		  {
@@ -203,8 +203,37 @@ def busca_schema(produto):
 		}
 		""" 
 
+	_query_g1 = """
+		SELECT ?s ?p ?o
+		WHERE {
+		  {
+		  graph <http://semantica.globo.com/G1/> {?s a owl:Class; rdfs:subClassOf ?o}
+		  {?o a owl:Class BIND (rdfs:subClassOf AS ?p)}
+		  filter (?o != owl:Thing )
+		  }
+		  union
+		  {
+		  graph <http://semantica.globo.com/G1/> {?s a owl:Class}
+		  {?p rdfs:range ?o; rdfs:domain ?super.
+		    ?s rdfs:subClassOf ?super
+		    OPTION (TRANSITIVE, t_distinct, t_step('step_no') as ?n, t_min (0) )}.
+		    ?o a owl:Class
+		  }
+	    filter (?s != <http://semantica.globo.com/G1/Materia>)
+	    filter (?s != <http://semantica.globo.com/G1/GaleriaDeFotos>)
+	    filter (?s != <http://semantica.globo.com/G1/Conteudo>)
+	    filter (?s != <http://semantica.globo.com/G1/Foto>)
+	    filter (?o != <http://semantica.globo.com/G1/Materia>)
+	    filter (?o != <http://semantica.globo.com/G1/GaleriaDeFotos>)
+	    filter (?o != <http://semantica.globo.com/G1/Conteudo>)
+	    filter (?o != <http://semantica.globo.com/G1/Foto>)
+		}
+		""" 
+
 	if produto == 'esportes':
-		_entidades = roda_query(_query_produto)
+		_entidades = roda_query(_query_esportes)
+	elif produto == 'G1':
+		_entidades = roda_query(_query_g1)
 	elif produto == 'base':
 		_entidades = roda_query(_query_base)
 
@@ -571,6 +600,9 @@ if __name__ == '__main__':
 	db = MySQLdb.connect("localhost","root","","PUC" )
 	cursor = db.cursor()
 
+	cursor.execute(""" select name_txt from g1.folder where folder_id = %s ;""" % (EDITORIA))
+	editoria = cursor.fetchone()
+
 	id_execucao = grava_execucao(NOME_PRODUTO, DATA_INICIO, DATA_FIM, SUPER_NODE, MAX_PATH, "sem editoria")
 
 	print "Busca materias ..."
@@ -623,13 +655,13 @@ if __name__ == '__main__':
 		F = nx.DiGraph()
 		print "Carregando o grafo salvo no MySQL..."
 		cursor.execute("""
-						select a, b, cluster, peso, combinado
+						select a, b, cluster, idf, combinado
 						from grafo_schwabe ;
 						""")
 
 		items = cursor.fetchall()
 		for i in items:
-			F.add_edge(i[0], i[1], cluster = i[2], peso = i[3], combinado = i[4])
+			F.add_edge(i[0], i[1], cluster = i[2], idf = i[3], combinado = i[4])
 	else:
 
 		S = cria_grafo()
@@ -668,11 +700,11 @@ if __name__ == '__main__':
 						c = float(x_y) / (x_size - 1)
 						p = 1 / math.sqrt(y_size)
 						cxp = c * p
-						DI.add_edge(x,y, cluster = c, peso = p, combinado = cxp)
+						DI.add_edge(x,y, cluster = c, idf = p, combinado = cxp)
 						c = float(x_y) / (y_size - 1)
 						p = 1 / math.sqrt(x_size)
 						cxp = c * p
-						DI.add_edge(y,x, cluster = c, peso = p, combinado = cxp)
+						DI.add_edge(y,x, cluster = c, idf = p, combinado = cxp)
 
 		print("O grafo tem %d nos com %d arestas"\
 		          %(nx.number_of_nodes(DI),nx.number_of_edges(DI)))
@@ -683,7 +715,7 @@ if __name__ == '__main__':
 		select ?s where {?s a <%s>}
 		"""
 		for edg in DI.edges_iter(nbunch=None, data=True):
-			print edg[0], edg[1], "%.2f" % edg[2]['cluster'], "%.2f" % edg[2]['peso'], "%.2f" % edg[2]['combinado']
+			print edg[0], edg[1], "%.2f" % edg[2]['cluster'], "%.2f" % edg[2]['idf'], "%.2f" % edg[2]['combinado']
 			print "Query 1"
 			edg0 = roda_query(query % edg[0])
 			print "Query 2"
@@ -695,8 +727,8 @@ if __name__ == '__main__':
 					y = e1["s"]["value"]
 					if G.has_edge(x, y):
 						F.add_edge(x, y, edg[2])
-						sql = """INSERT INTO grafo_schwabe (a, b, cluster, peso, combinado) VALUES (%s, %s, %s, %s, %s);"""
-						data = (x, y, edg[2]['cluster'], edg[2]['peso'], edg[2]['combinado'])
+						sql = """INSERT INTO grafo_schwabe (produto, a, b, cluster, idf, combinado) VALUES (%s, %s, %s, %s, %s, %s);"""
+						data = (NOME_PRODUTO, x, y, edg[2]['cluster'], edg[2]['idf'], edg[2]['combinado'])
 						cursor.execute(sql, data)
 						db.commit()
 
@@ -722,9 +754,9 @@ if __name__ == '__main__':
 						combinado[m0+'.'+m1] += F[e0][e1]["combinado"]
 			if combinado.has_key(m0+'.'+m1): 
 				query = """
-				insert into materias_schwabe (origem, destino, combinado)
-				values ('%s', '%s', %s);
-				""" % (m0, m1, combinado[m0+'.'+m1])
+				insert into materias_schwabe (id_execucao, origem, destino, combinado)
+				values (%s, '%s', '%s', %s);
+				""" % (id_execucao, m0, m1, combinado[m0+'.'+m1])
 				cursor.execute(query)
 				db.commit()
 

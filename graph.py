@@ -7,26 +7,23 @@ import timeit
 from sys import stdout, argv
 
 IMAGEM_ON = False
-MAX_TRIPLAS = 1000000
+# MAX_TRIPLAS = 1000000
+MAX_TRIPLAS = 100000
 MAX_MATERIAS = 1000
-SUPER_NODE = 1000
+# SUPER_NODE = 1000
+SUPER_NODE = 100
 MAX_PATH = 3
 SALVA_PATHS = False
 NOME_PRODUTO = "G1"
 # NOME_PRODUTO = "esportes"
 CARREGA_GRAFO_MYSQL = True
-MAX_RECOMENDACOES_POR_MATERIA = 10
+MAX_RECOMENDACOES_POR_MATERIA = 5
 
-DATA_INICIO = "2013-01-01 00:00:00"
-DATA_FIM    = "2013-02-01 00:00:00"
-EDITORIA 	= argv[1]
-
-def gera_imagem(G):
-	import matplotlib.pyplot as plt
-	nx.draw(G, with_labels=False)
-	plt.savefig("path.png")
 
 def roda_query(query):
+	"""
+	Executa queries SPARQL no endpoint http://localhost:8890/sparql/
+	"""
 	from SPARQLWrapper import SPARQLWrapper, JSON
 	_sparql = SPARQLWrapper("http://localhost:8890/sparql/")
 	_sparql.setQuery(query)
@@ -34,59 +31,12 @@ def roda_query(query):
 	results = _sparql.query().convert()
 	return results["results"]["bindings"]	
 
-def busca_materias(produto, data_inicio, data_fim, max_materias):
-	_materias_esporte = """
-		SELECT ?s ?p ?o
-		FROM <http://semantica.globo.com/esportes/>
-		WHERE {?s a <http://semantica.globo.com/esportes/MateriaEsporte>;
-	           <http://semantica.globo.com/base/data_da_primeira_publicacao> ?data ;
-		       ?p ?o 
-		filter (isURI(?o) && !isBlank(?o))
-		filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
-		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> && ?p != <http://www.w3.org/2000/01/rdf-schema#subClassOf>)
-		filter (?data >= "%s"^^xsd:dateTime && ?data < "%s"^^xsd:dateTime)
-		} 
-		order by ?s
-		limit %s
-		""" % (data_inicio, data_fim, max_materias)
-
-	_materias_G1 = """
-		SELECT ?s ?p ?o
-		FROM <http://semantica.globo.com/G1/>
-		WHERE {?s a <http://semantica.globo.com/G1/Materia>;
-		       # <http://semantica.globo.com/G1/editoria_id> "8";
-	           <http://semantica.globo.com/base/data_da_primeira_publicacao> ?data ;
-		       ?p ?o 
-		filter (isURI(?o) && !isBlank(?o))
-		filter ( ?o != <http://www.w3.org/2002/07/owl#DatatypeProperty> && ?o != <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> && ?o != <http://www.w3.org/2002/07/owl#Class> && ?o != <http://www.w3.org/2002/07/owl#ObjectProperty>) 
-		filter (?p != <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> && ?p != <http://www.w3.org/2000/01/rdf-schema#subClassOf>)
-		filter (?data >= "%s"^^xsd:dateTime && ?data < "%s"^^xsd:dateTime)
-		} 
-		order by ?s
-		limit %s
-		""" % (data_inicio, data_fim, max_materias)
-
-	if produto == 'esportes':
-		_materias = roda_query(_materias_esporte)
-	elif produto == 'G1':
-		_materias = roda_query(_materias_G1)
-
-	_materias_order = sorted(_materias, key=lambda k: k['s']['value']) 
-
-	_lista_materias = {}
-
-	_old_value = ''
-
-	for i in _materias_order:
-		if _old_value != i["s"]["value"]:
-			_lista_materias[i["s"]["value"]] = [i["o"]["value"]]
-			_old_value = i["s"]["value"]
-		else:
-			_lista_materias[i["s"]["value"]].append(i["o"]["value"])
-	return _lista_materias
 
 def busca_entidades(produto, max_triplas):
-
+	"""
+	Seleciona todas as triplas de entidades (pessoa, lugar, etc...) 
+	da base RDF do G1
+	"""
 	_query_esportes = """
 		SELECT ?s ?p ?o
 		FROM <http://semantica.globo.com/esportes/>
@@ -160,12 +110,19 @@ def busca_entidades(produto, max_triplas):
 	return _entidades
 
 def carrega_grafo(grafo, items):
+	"""
+	Carrega o grafo "grafo" com todos os itens
+	"""
 	for i in items:
 		grafo.add_node(i["s"]["value"])
 		grafo.add_node(i["o"]["value"])
 		grafo.add_edge(i["s"]["value"],i["o"]["value"], uri=i["p"]["value"])
 	
 def carrega_grafo_from_mysql(grafo):
+	"""
+	Carrega o grafo "grafo" com todos os itens a partir de uma query
+	SQL.
+	"""
 	cursor.execute("""
 					select s, p, o 
 					from grafo ;
@@ -178,9 +135,15 @@ def carrega_grafo_from_mysql(grafo):
 		grafo.add_edge(i[0],i[2])
 
 def cria_grafo():
+	"""
+	Cria o grafo, uma instância do objeto Graph do NetworkX.
+	"""
 	return nx.Graph()
 
 def remove_supernode(grafo, max_node):
+	"""
+	Remove de grafo os nós identificados como supernodes.
+	"""
 	if max_node > 0:
 		for i in grafo.nodes():
 			if grafo.degree(i) > max_node:
@@ -188,6 +151,10 @@ def remove_supernode(grafo, max_node):
 
 
 def calcula_path(lista_materias, G, max_path, salva_paths):
+	"""
+	Utilizando um loop duplo calcula o path entre as entidades de 
+	cada par de matérias.
+	"""
 	_uniao = {}
 	_scores = {}
 	_paths = {}
@@ -265,7 +232,10 @@ def calcula_path(lista_materias, G, max_path, salva_paths):
 
 
 def busca_materias_saibamais(data_inicio, data_fim, editoria, max_materias):
-	""" Busca as materias relacionadas à matéria principal pelo componente "Saiba Mais" """
+	""" 
+	Busca as materias relacionadas à matéria principal pelo 
+	componente "Saiba Mais" 
+	"""
 	from lxml import etree
 	import lxml.html as lh
 	from BeautifulSoup import BeautifulSoup, Tag
@@ -428,7 +398,7 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria, max_materias):
 		else:
 			_lista_materias[i["s"]["value"]].append(i["o"]["value"])
 
-	# Remove valores duplicados nas
+	# Remove valores duplicados na lista de matérias
 	for i in _lista_materias:
 		_lista_materias[i] = list(set(_lista_materias[i]))
 
@@ -439,6 +409,9 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria, max_materias):
 
 
 def grava_execucao(produto, dt_inicio, dt_fim, supernode, max_path, editoria):
+	"""
+	Grava o log das execuções do programa.
+	"""
 	_sql = """INSERT INTO execucao (produto, dt_inicio, dt_fim, supernode, max_path, editoria) VALUES (%s, %s, %s, %s, %s, %s);"""
 	_data = (produto, dt_inicio, dt_fim, supernode, max_path, editoria)
 	cursor.execute(_sql, _data)
@@ -447,6 +420,9 @@ def grava_execucao(produto, dt_inicio, dt_fim, supernode, max_path, editoria):
 	return _id
 
 def atualiza_execucao(id_execucao, materias, g_nos, g_arestas):
+	"""
+	Atualiza o log das execuções do programa.
+	"""	
 	_sql = """UPDATE execucao  SET materias = %s, nos = %s, arestas = %s where id = %s;"""
 	_data = (materias, g_nos, g_arestas, id_execucao)
 	cursor.execute(_sql, _data)
@@ -454,6 +430,9 @@ def atualiza_execucao(id_execucao, materias, g_nos, g_arestas):
 	db.commit()
 
 def analisa_resultado(id_execucao, max_recomendacoes_por_materia):
+	"""
+	Calcula a quantidade de acertos atingida pelo programa.
+	"""
 	_acertos = 0
 	cursor.execute("""
 		select origem, count(*)
@@ -511,13 +490,29 @@ def analisa_resultado(id_execucao, max_recomendacoes_por_materia):
 
 if __name__ == '__main__':
 
+	if len(argv) == 4:
+		# Parâmetros para seleção de matérias
+		EDITORIA 	= argv[1]
+		DATA_INICIO = argv[2]
+		DATA_FIM 	= argv[3]
+		# DATA_INICIO = "2013-01-01 00:00:00"
+		# DATA_FIM    = "2013-01-10 00:00:00"
+	else:
+		print ""
+		print "Uso graph <editoria> <data_inicio> <data_fim> "
+		print ""
+		quit()
+
+	# Registra hora de inicio de execução do programa
 	start = timeit.default_timer()
 
 	print "\nProduto: " + NOME_PRODUTO + "\n"
 
+	# Cria conexão com MySQL
 	db = MySQLdb.connect("localhost","root","","PUC" )
 	cursor = db.cursor()
 
+	# Recupera nome da editoria
 	cursor.execute(""" select name_txt from g1.folder where folder_id = %s ;""" % (EDITORIA))
 	editoria = cursor.fetchone()
 
@@ -525,16 +520,13 @@ if __name__ == '__main__':
 
 	print "Busca materias de " + editoria[0] + "..."
 
-	# lista_materias = busca_materias(NOME_PRODUTO, DATA_INICIO, DATA_FIM, MAX_MATERIAS)
+	# carrega a lista de matérias no dict lista_materia no formato:
+	# {uri_materia1: [entidade1, entidade2], uri_materia2: [entidade3, entidade4]} 
 	lista_materias = busca_materias_saibamais(DATA_INICIO, DATA_FIM, EDITORIA, MAX_MATERIAS)
 
 	# import pdb; pdb.set_trace()
 
 	total_materias = len(lista_materias.keys())
-
-	if total_materias == 0:
-		print "Nenhuma materia retornada."
-		quit()
 
 	print "Total de materias: ", total_materias
 
@@ -583,13 +575,11 @@ if __name__ == '__main__':
 	calcula_path(lista_materias, G, MAX_PATH, SALVA_PATHS)
 
 
-	if IMAGEM_ON:
-		gera_imagem(G)
-
 	print "Analizando resultado..."
 	acertos = analisa_resultado(id_execucao, MAX_RECOMENDACOES_POR_MATERIA)
 	print acertos, "acertos de ", total_materias, "matérias."
 
+	# Registra hora de fim de execução do programa e tempo total
 	stop = timeit.default_timer()
 	tempo_execucao = stop - start 
 
@@ -602,5 +592,5 @@ if __name__ == '__main__':
 
 	cursor.close()
 
-	print "fim processamento"
+	print "Fim processamento"
 	print "Tempo de execucao (segundos):", tempo_execucao
