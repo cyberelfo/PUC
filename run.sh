@@ -14,18 +14,18 @@
 # Mercados - 216
 # Tecnologia e Games - 105
 
-python graph.py 39
-python graph.py 76
-python graph.py 42
-python graph.py 146
-python graph.py 214
-python graph.py 94
-python graph.py 8
-python graph.py 339
-python graph.py 20
-python graph.py 101
-python graph.py 119
-python graph.py 31
-python graph.py 133
-python graph.py 216
-python graph.py 105
+python graph.py 39 "2013-01-01 00:00:00" "2013-01-10 00:00:00"
+python graph.py 76 "2013-01-01 00:00:00" "2013-01-10 00:00:00"
+python graph.py 42 "2013-01-01 00:00:00" "2013-01-10 00:00:00"
+python graph.py 146 "2013-01-01 00:00:00" "2013-01-10 00:00:00"
+python graph.py 214 "2013-01-01 00:00:00" "2013-01-10 00:00:00"
+python graph.py 94 "2013-01-01 00:00:00" "2013-01-10 00:00:00"
+python graph.py 8 "2013-01-01 00:00:00" "2013-01-10 00:00:00"
+python graph.py 339 "2013-01-01 00:00:00" "2013-01-10 00:00:00"
+python graph.py 20 "2013-01-01 00:00:00" "2013-01-10 00:00:00"
+python graph.py 101 "2013-01-01 00:00:00" "2013-01-10 00:00:00"
+python graph.py 119 "2013-01-01 00:00:00" "2013-01-10 00:00:00"
+python graph.py 31 "2013-01-01 00:00:00" "2013-01-10 00:00:00"
+python graph.py 133 "2013-01-01 00:00:00" "2013-01-10 00:00:00"
+python graph.py 216 "2013-01-01 00:00:00" "2013-01-10 00:00:00"
+python graph.py 105 "2013-01-01 00:00:00" "2013-01-10 00:00:00"

@@ -29,7 +29,7 @@ def roda_query(query):
 	_sparql.setQuery(query)
 	_sparql.setReturnFormat(JSON)
 	results = _sparql.query().convert()
-	return results["results"]["bindings"]	
+	return results["results"]["bindings"]
 
 
 def busca_entidades(produto, max_triplas):
@@ -113,12 +113,13 @@ def carrega_grafo(grafo, items):
 	"""
 	Carrega o grafo "grafo" com todos os itens
 	"""
+
 	for i in items:
 		grafo.add_node(i["s"]["value"])
 		grafo.add_node(i["o"]["value"])
 		grafo.add_edge(i["s"]["value"],i["o"]["value"], uri=i["p"]["value"])
 	
-def carrega_grafo_from_mysql(grafo):
+def carrega_grafo_from_mysql(cursor, grafo):
 	"""
 	Carrega o grafo "grafo" com todos os itens a partir de uma query
 	SQL.
@@ -150,11 +151,12 @@ def remove_supernode(grafo, max_node):
 				grafo.remove_node(i)
 
 
-def calcula_path(lista_materias, G, max_path, salva_paths):
+def calcula_path(lista_materias, G, max_path, salva_paths, db, id_execucao):
 	"""
 	Utilizando um loop duplo calcula o path entre as entidades de 
 	cada par de matérias.
 	"""
+	cursor = db.cursor()
 	_uniao = {}
 	_scores = {}
 	_paths = {}
@@ -231,7 +233,7 @@ def calcula_path(lista_materias, G, max_path, salva_paths):
 	print "Search:", search, "Hit:", hit
 
 
-def busca_materias_saibamais(data_inicio, data_fim, editoria, max_materias):
+def busca_materias_saibamais(data_inicio, data_fim, editoria, max_materias, db, id_execucao):
 	""" 
 	Busca as materias relacionadas à matéria principal pelo 
 	componente "Saiba Mais" 
@@ -241,6 +243,8 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria, max_materias):
 	from BeautifulSoup import BeautifulSoup, Tag
 
 	_entidades = []
+
+	cursor = db.cursor()
 
 	# Busca as matérias do MySQL que tem o componente "Saiba Mais"
 	db_g1 = MySQLdb.connect("localhost","root","","g1" )
@@ -408,10 +412,11 @@ def busca_materias_saibamais(data_inicio, data_fim, editoria, max_materias):
 
 
 
-def grava_execucao(produto, dt_inicio, dt_fim, supernode, max_path, editoria):
+def grava_execucao(produto, dt_inicio, dt_fim, supernode, max_path, editoria, db):
 	"""
 	Grava o log das execuções do programa.
 	"""
+	cursor = db.cursor()
 	_sql = """INSERT INTO execucao (produto, dt_inicio, dt_fim, supernode, max_path, editoria) VALUES (%s, %s, %s, %s, %s, %s);"""
 	_data = (produto, dt_inicio, dt_fim, supernode, max_path, editoria)
 	cursor.execute(_sql, _data)
@@ -419,20 +424,22 @@ def grava_execucao(produto, dt_inicio, dt_fim, supernode, max_path, editoria):
 	db.commit()
 	return _id
 
-def atualiza_execucao(id_execucao, materias, g_nos, g_arestas):
+def atualiza_execucao(id_execucao, materias, g_nos, g_arestas, db):
 	"""
 	Atualiza o log das execuções do programa.
 	"""	
+	cursor = db.cursor()
 	_sql = """UPDATE execucao  SET materias = %s, nos = %s, arestas = %s where id = %s;"""
 	_data = (materias, g_nos, g_arestas, id_execucao)
 	cursor.execute(_sql, _data)
 	_id = cursor.lastrowid
 	db.commit()
 
-def analisa_resultado(id_execucao, max_recomendacoes_por_materia):
+def analisa_resultado(id_execucao, max_recomendacoes_por_materia, db):
 	"""
 	Calcula a quantidade de acertos atingida pelo programa.
 	"""
+	cursor = db.cursor()
 	_acertos = 0
 	cursor.execute("""
 		select origem, count(*)
@@ -499,7 +506,8 @@ if __name__ == '__main__':
 		# DATA_FIM    = "2013-01-10 00:00:00"
 	else:
 		print ""
-		print "Uso graph <editoria> <data_inicio> <data_fim> "
+		print "Uso:"
+		print "graph <editoria> <data_inicio> <data_fim> "
 		print ""
 		quit()
 
@@ -516,13 +524,13 @@ if __name__ == '__main__':
 	cursor.execute(""" select name_txt from g1.folder where folder_id = %s ;""" % (EDITORIA))
 	editoria = cursor.fetchone()
 
-	id_execucao = grava_execucao(NOME_PRODUTO, DATA_INICIO, DATA_FIM, SUPER_NODE, MAX_PATH, editoria[0])
+	id_execucao = grava_execucao(NOME_PRODUTO, DATA_INICIO, DATA_FIM, SUPER_NODE, MAX_PATH, editoria[0], db)
 
 	print "Busca materias de " + editoria[0] + "..."
 
 	# carrega a lista de matérias no dict lista_materia no formato:
 	# {uri_materia1: [entidade1, entidade2], uri_materia2: [entidade3, entidade4]} 
-	lista_materias = busca_materias_saibamais(DATA_INICIO, DATA_FIM, EDITORIA, MAX_MATERIAS)
+	lista_materias = busca_materias_saibamais(DATA_INICIO, DATA_FIM, EDITORIA, MAX_MATERIAS, db, id_execucao)
 
 	# import pdb; pdb.set_trace()
 
@@ -534,7 +542,7 @@ if __name__ == '__main__':
 
 	if CARREGA_GRAFO_MYSQL:
 		print "Carregando o grafo salvo no MySQL..."
-		carrega_grafo_from_mysql(G)
+		carrega_grafo_from_mysql(cursor, G)
 	else:
 
 		print "Busca triplas produto..."
@@ -566,17 +574,17 @@ if __name__ == '__main__':
 
 	# import pdb; pdb.set_trace()
 
-	atualiza_execucao(id_execucao, total_materias, nx.number_of_nodes(G), nx.number_of_edges(G))
+	atualiza_execucao(id_execucao, total_materias, nx.number_of_nodes(G), nx.number_of_edges(G), db)
 
 	print "Calculando os paths..."
 
 	# import pdb; pdb.set_trace()
 
-	calcula_path(lista_materias, G, MAX_PATH, SALVA_PATHS)
+	calcula_path(lista_materias, G, MAX_PATH, SALVA_PATHS, db, id_execucao)
 
 
 	print "Analizando resultado..."
-	acertos = analisa_resultado(id_execucao, MAX_RECOMENDACOES_POR_MATERIA)
+	acertos = analisa_resultado(id_execucao, MAX_RECOMENDACOES_POR_MATERIA, db)
 	print acertos, "acertos de ", total_materias, "matérias."
 
 	# Registra hora de fim de execução do programa e tempo total
