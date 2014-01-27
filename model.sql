@@ -14,7 +14,7 @@ CREATE TABLE `execucao` (
   `arestas` int(11) DEFAULT NULL,
   `tempo_execucao` float DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Create syntax for TABLE 'grafo'
 CREATE TABLE `grafo` (
@@ -23,19 +23,7 @@ CREATE TABLE `grafo` (
   `p` varchar(750) DEFAULT NULL,
   `o` varchar(750) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=MyISAM AUTO_INCREMENT=466850 DEFAULT CHARSET=latin1;
-
--- Create syntax for TABLE 'individuos'
-CREATE TABLE `paths` (
-  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-  `id_execucao` int(11) DEFAULT NULL,
-  `origem` varchar(750) DEFAULT NULL,
-  `destino` varchar(750) DEFAULT NULL,
-  `path` text,
-  `tamanho` int(11) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `idx_execucao` (`id_execucao`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=MyISAM AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 
 -- Create syntax for TABLE 'materias'
 CREATE TABLE `materias` (
@@ -51,7 +39,7 @@ CREATE TABLE `materias` (
   PRIMARY KEY (`id`),
   KEY `idx_execucao` (`id_execucao`),
   KEY `id_execucao` (`id_execucao`,`origem`(255))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- Create syntax for TABLE 'materias_saibamais'
 CREATE TABLE `materias_saibamais` (
@@ -60,4 +48,16 @@ CREATE TABLE `materias_saibamais` (
   `materia_principal` varchar(750) DEFAULT NULL,
   `materia_saibamais` varchar(750) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
+
+-- Create syntax for TABLE 'paths'
+CREATE TABLE `paths` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `id_execucao` int(11) DEFAULT NULL,
+  `origem` varchar(750) DEFAULT NULL,
+  `destino` varchar(750) DEFAULT NULL,
+  `path` text,
+  `tamanho` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_execucao` (`id_execucao`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
